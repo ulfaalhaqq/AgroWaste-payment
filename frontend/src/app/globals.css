@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+@import "./(public)/user.css";
+@import "./seller/seller.css";
+@import "./admin/admin.css";
+@import "./courier/courier.css";
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    @apply appearance-none bg-transparent border-0 outline-none;
+  }
+}
+
+@layer components {
+  .all-\[unset\] {
+    all: unset;
+  }
+}
+
+:root {
+  --foundation-greendark: rgba(29, 60, 8, 1);
+  --foundation-greendark-active: rgba(18, 36, 5, 1);
+  --foundation-greendark-hover: rgba(23, 48, 6, 1);
+  --foundation-greendarker: rgba(14, 28, 4, 1);
+  --foundation-greenlight: rgba(233, 238, 231, 1);
+  --foundation-greenlight-active: rgba(188, 201, 179, 1);
+  --foundation-greenlight-hover: rgba(223, 229, 218, 1);
+  --foundation-greennormal: rgba(39, 80, 10, 1);
+  --foundation-greennormal-active: rgba(31, 64, 8, 1);
+  --foundation-greennormal-hover: rgba(35, 72, 9, 1);
+}
+
+:root {
+  --animate-spin: spin 1s linear infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 1s var(--animation-delay, 0s) ease forwards;
+}
+
+.animate-fade-up {
+  animation: fade-up 1s var(--animation-delay, 0s) ease forwards;
+}
+
+.animate-marquee {
+  animation: marquee var(--duration) infinite linear;
+}
+
+.animate-marquee-vertical {
+  animation: marquee-vertical var(--duration) linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 8s infinite;
+}
+
+.animate-spin {
+  animation: var(--animate-spin);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.33); opacity: 1; }
+  80%, 100% { transform: scale(1.3); opacity: 0; }
+}
+
+@keyframes image-glow {
+  0% {
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.74, 0.25, 0.76, 1);
+  }
+
+  10% {
+    opacity: 0.7;
+    animation-timing-function: cubic-bezier(0.12, 0.01, 0.08, 0.99);
+  }
+
+  to {
+    opacity: 0.4;
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  90%,
+  to {
+    background-position: calc(-100% - var(--shimmer-width)) 0;
+  }
+
+  30%,
+  60% {
+    background-position: calc(100% + var(--shimmer-width)) 0;
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translate(0);
+  }
+
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes marquee-vertical {
+  0% {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+}
+
+/* Base */
+html, body {
+  height: 100%;
+  background-color: #fff8f5;
+  font-family: 'Nunito Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dashboard Font & Tabular Overrides */
+.seller-theme, .admin-theme, .courier-theme {
+  font-family: 'Nunito Sans', sans-serif !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+/* Prevent thin font weights (anything below 400) in dashboards */
+.seller-theme .font-light,
+.admin-theme .font-light,
+.courier-theme .font-light,
+.seller-theme .font-thin,
+.admin-theme .font-thin,
+.courier-theme .font-thin,
+.seller-theme .font-extralight,
+.admin-theme .font-extralight,
+.courier-theme .font-extralight {
+  font-weight: 500 !important;
+}
+
+@layer utilities {
+  .font-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .animate-radar {
+    animation: pulse-ring 2s cubic-bezier(0.215, 0.610, 0.355, 1) infinite;
+  }
+} 

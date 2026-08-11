@@ -1,0 +1,34 @@
+@theme {
+  /* Admin — Deep Forest #2C3930 */
+  --color-admin-primary: #2C3930;
+  --color-admin-primary-hover: #1E2822;
+  --color-admin-primary-light: #E8EDE9;
+  --color-admin-warmbg: #F0EDE6;
+  --color-admin-surfacewhite: #FFFFFF;
+  --color-admin-textprimary: #1A2420;
+  --color-admin-textsecondary: #5C6D65;
+  --color-admin-hairline: #DCD7C9;
+  --color-admin-semgreen: #10B981;
+  --color-admin-semamber: #F59E0B;
+  --color-admin-semred: #EF4444;
+  --color-admin-sembordered: #DCD7C9;
+}
+
+@layer utilities {
+  .admin-theme {
+    &::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: var(--color-admin-warmbg, #F0EDE6);
+    }
+    &::-webkit-scrollbar-thumb {
+      background: var(--color-admin-hairline, #DCD7C9);
+      border-radius: 9999px;
+    }
+    &::-webkit-scrollbar-thumb:hover {
+      background: var(--color-admin-primary, #2C3930);
+    }
+  }
+}
