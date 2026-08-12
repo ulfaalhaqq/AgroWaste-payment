@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Auth\Notifications\ResetPassword; // tambah ini
 
 #[Fillable(['id', 'name', 'email', 'password', 'role', 'phone', 'avatar_url'])]
 #[Hidden(['password', 'remember_token'])]
@@ -19,12 +20,6 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
     public $incrementing = false;
     protected $keyType = 'string';
-
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
 
     protected function casts(): array
     {
@@ -48,5 +43,16 @@ class User extends Authenticatable
     {
         return $this->hasOne(LogistikProfile::class);
     }
-}
 
+    // Tambahkan ini
+    public function sendPasswordResetNotification($token)
+    {
+        $url = env('FRONTEND_URL') . '/reset-password?token=' . $token . '&email=' . urlencode($this->email);
+
+        ResetPassword::createUrlUsing(function () use ($url) {
+            return $url;
+        });
+
+        $this->notify(new ResetPassword($token));
+    }
+}

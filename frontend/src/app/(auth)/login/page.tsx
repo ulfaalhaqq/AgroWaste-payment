@@ -138,6 +138,7 @@ function LoginPageContent() {
                 Kata Sandi
               </label>
             </div>
+    
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <svg
@@ -247,6 +248,14 @@ function LoginPageContent() {
               </>
             )}
           </button>
+          <div className="flex justify-end">
+            <Link
+              href="/forgot-password"
+              className="text-sm text-land-clay hover:text-land-muted font-medium transition-colors"
+            >
+              Lupa password?
+            </Link>
+          </div>
         </form>
 
         <div className="max-w-sm w-full text-center mb-8 border-b border-land-cream pb-8 mx-auto lg:mx-0">
@@ -312,7 +321,11 @@ function LoginPageContent() {
             <a
               href={(() => {
                 const raw = (adminPhone ?? "6281234567890").replace(/\D/g, "");
-                const wa = raw.startsWith("0") ? "62" + raw.slice(1) : raw.startsWith("62") ? raw : "62" + raw;
+                const wa = raw.startsWith("0")
+                  ? "62" + raw.slice(1)
+                  : raw.startsWith("62")
+                    ? raw
+                    : "62" + raw;
                 return `https://wa.me/${wa}?text=Halo%20Admin%20AgroWaste%2C%20saya%20ingin%20mendaftar%20sebagai%20Mitra%20Kurir%20Logistik.`;
               })()}
               target="_blank"
@@ -369,7 +382,7 @@ function LoginPageContent() {
               alam.&quot;
             </p>
             <p className="font-bold text-land-clay font-land-heading">
-              — AgroWaste Vision 2030
+              — AgroWaste Vision 2027
             </p>
           </div>
         </div>
