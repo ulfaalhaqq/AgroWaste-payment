@@ -16,7 +16,7 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
 class Product extends Model implements HasMedia
 {
     use HasUuids, SoftDeletes;
-    
+
     // Tambahkan trait InteractsWithMedia di sini
     use InteractsWithMedia;
 
@@ -28,7 +28,6 @@ class Product extends Model implements HasMedia
         'description',
         'jenis_ternak',
         'kondisi',
-        'nutrisi',
         'price',
         'unit',
         'stock_kg',
@@ -43,7 +42,6 @@ class Product extends Model implements HasMedia
     ];
 
     protected $casts = [
-        'nutrisi' => 'array',
         'rating_avg' => 'float',
         'review_count' => 'integer',
     ];
@@ -78,16 +76,16 @@ class Product extends Model implements HasMedia
 
     public function getRatingAvgAttribute($value): float
     {
-        if ($value !== null && (float)$value > 0) {
+        if ($value !== null && (float) $value > 0) {
             return (float) $value;
         }
         $avg = $this->reviews()->avg('rating');
-        return $avg ? round((float)$avg, 1) : 0.0;
+        return $avg ? round((float) $avg, 1) : 0.0;
     }
 
     public function getReviewCountAttribute($value): int
     {
-        if ($value !== null && (int)$value > 0) {
+        if ($value !== null && (int) $value > 0) {
             return (int) $value;
         }
         return $this->reviews()->count();
