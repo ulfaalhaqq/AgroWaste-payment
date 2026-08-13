@@ -34,7 +34,6 @@ interface Product {
   image_urls?: string[];
   media?: ProductMedia[];
   category?: { id: string; name: string };
-  nutrisi?: [string, string][] | null;
   peternak_profile?: { user_id: string; nama_peternakan: string };
 }
 
@@ -52,10 +51,6 @@ interface ProductForm {
   provinsi: string;
   kabupaten: string;
   kecamatan: string;
-  nutrisi_n: string;
-  nutrisi_p: string;
-  nutrisi_k: string;
-  nutrisi_c: string;
 }
 
 const EMPTY_FORM: ProductForm = {
@@ -70,10 +65,6 @@ const EMPTY_FORM: ProductForm = {
   provinsi: "",
   kabupaten: "",
   kecamatan: "",
-  nutrisi_n: "",
-  nutrisi_p: "",
-  nutrisi_k: "",
-  nutrisi_c: "",
 };
 
 const JENIS_OPTIONS = ["sapi", "kambing", "ayam"];
@@ -334,15 +325,6 @@ export default function InventoryPage() {
 
   const openEdit = (p: Product) => {
     setFormMode("edit");
-    const nutrisiMap: Record<string, string> = {};
-    if (p.nutrisi && Array.isArray(p.nutrisi)) {
-      p.nutrisi.forEach(([val, label]) => {
-        if (label.includes("Nitrogen")) nutrisiMap.n = val;
-        if (label.includes("Fosfor")) nutrisiMap.p = val;
-        if (label.includes("Kalium")) nutrisiMap.k = val;
-        if (label.includes("C-Organik")) nutrisiMap.c = val;
-      });
-    }
     setForm({
       name: p.name,
       category_id: p.category?.id ?? "",
@@ -355,10 +337,6 @@ export default function InventoryPage() {
       provinsi: p.provinsi,
       kabupaten: p.kabupaten,
       kecamatan: p.kecamatan,
-      nutrisi_n: nutrisiMap.n ?? "",
-      nutrisi_p: nutrisiMap.p ?? "",
-      nutrisi_k: nutrisiMap.k ?? "",
-      nutrisi_c: nutrisiMap.c ?? "",
     });
     setEditId(p.id);
     setEditProductMedia(p.media ?? []);
@@ -420,11 +398,6 @@ export default function InventoryPage() {
     setSubmitting(true);
     setSubmitLabel(formMode === "add" ? "Membuat produk..." : "Menyimpan...");
     try {
-      const nutrisiArr: [string, string][] = [];
-      if (form.nutrisi_n) nutrisiArr.push([form.nutrisi_n, "Nitrogen (N)"]);
-      if (form.nutrisi_p) nutrisiArr.push([form.nutrisi_p, "Fosfor (P)"]);
-      if (form.nutrisi_k) nutrisiArr.push([form.nutrisi_k, "Kalium (K)"]);
-      if (form.nutrisi_c) nutrisiArr.push([form.nutrisi_c, "C-Organik"]);
 
       const body: Record<string, unknown> = {
         name: form.name,
@@ -440,9 +413,6 @@ export default function InventoryPage() {
         kecamatan: form.kecamatan || null,
       };
 
-      if (nutrisiArr.length > 0) {
-        body.nutrisi = nutrisiArr;
-      }
       const res =
         formMode === "add"
           ? await apiFetch("/products", {
@@ -1034,74 +1004,6 @@ export default function InventoryPage() {
                 "text",
                 "Mis: Kering, Fermentasi 30 hari",
               )}
-
-              {/* Kandungan Nutrisi (Opsional Uji Lab) */}
-              <div className="pt-2 border-t border-seller-hairline">
-                <p className="text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider mb-2">
-                  Kandungan Nutrisi / Uji Lab{" "}
-                  <span className="font-normal normal-case text-seller-textsecondary/80">
-                    (opsional)
-                  </span>
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-seller-textsecondary mb-1">
-                      Nitrogen (N)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Mis: 1.5%"
-                      value={form.nutrisi_n}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, nutrisi_n: e.target.value }))
-                      }
-                      className="w-full px-3 py-1.5 bg-seller-warmbg border border-seller-hairline rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-seller-textsecondary mb-1">
-                      Fosfor (P)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Mis: 0.8%"
-                      value={form.nutrisi_p}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, nutrisi_p: e.target.value }))
-                      }
-                      className="w-full px-3 py-1.5 bg-seller-warmbg border border-seller-hairline rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-seller-textsecondary mb-1">
-                      Kalium (K)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Mis: 1.2%"
-                      value={form.nutrisi_k}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, nutrisi_k: e.target.value }))
-                      }
-                      className="w-full px-3 py-1.5 bg-seller-warmbg border border-seller-hairline rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-seller-textsecondary mb-1">
-                      C-Organik
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Mis: 25%"
-                      value={form.nutrisi_c}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, nutrisi_c: e.target.value }))
-                      }
-                      className="w-full px-3 py-1.5 bg-seller-warmbg border border-seller-hairline rounded-lg text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
 
               <div>
                 <label className="block text-xs font-semibold text-seller-textsecondary mb-1">
