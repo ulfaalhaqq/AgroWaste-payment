@@ -156,7 +156,7 @@ export default function TwoFactorModal({
             </div>
 
             {/* Form Verifikasi 6 Digit */}
-            <form onSubmit={handleVerify} className="space-y-4">
+            <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
                   Masukkan 6 Digit Kode OTP dari HP:
@@ -188,7 +188,8 @@ export default function TwoFactorModal({
                   Batal
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleVerify}
                   disabled={verifying || otpCode.length !== 6}
                   className="w-2/3 py-2.5 bg-[#009A44] hover:bg-[#008239] text-white font-bold text-xs rounded-xl transition-colors shadow-md shadow-[#009A44]/20 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
@@ -199,7 +200,7 @@ export default function TwoFactorModal({
                   )}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         ) : (
           <div className="text-center py-6 animate-scale-up">

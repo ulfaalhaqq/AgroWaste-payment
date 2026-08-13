@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { Mail, ArrowRight } from "lucide-react";
+import { FaInstagram, FaWhatsapp } from "react-icons/fa";
 
 export function Footer() {
   return (
@@ -47,67 +48,84 @@ export function Footer() {
           </div>
 
           {/* Right: Link Columns */}
-          <div className="lg:w-6/12 grid grid-cols-2 gap-10">
-            {/* Column 1 */}
-            <div className="flex flex-col gap-6">
-              <h4 className="font-bold text-white tracking-widest text-xs uppercase mb-2">
-                Platform
-              </h4>
-              <Link
-                href="/marketplace"
-                className="text-[#A0AAB2] hover:text-white transition-colors"
-              >
-                Beli Organik
-              </Link>
-              <Link
-                href="/seller"
-                className="text-[#A0AAB2] hover:text-white transition-colors"
-              >
-                Jual Limbah
-              </Link>
-              <Link
-                href="/courier"
-                className="text-[#A0AAB2] hover:text-white transition-colors"
-              >
-                Mitra Logistik
-              </Link>
-            </div>
+          <div className="lg:w-6/12 flex flex-col gap-10">
+            <div className="grid grid-cols-2 gap-10">
+              {/* Column 1 */}
+              <div className="flex flex-col gap-6">
+                <h4 className="font-bold text-white tracking-widest text-xs uppercase mb-2">
+                  Platform
+                </h4>
+                <Link
+                  href="/marketplace"
+                  className="text-[#A0AAB2] hover:text-white transition-colors"
+                >
+                  Beli Organik
+                </Link>
+                <Link
+                  href="/role"
+                  className="text-[#A0AAB2] hover:text-white transition-colors"
+                >
+                  Jual Limbah
+                </Link>
+                <a
+                  href="https://wa.me/6283861298487?text=Halo%20Admin%20AgroWaste%2C%20saya%20ingin%20mendaftar%20sebagai%20Mitra%20Kurir%20Logistik."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#A0AAB2] hover:text-white transition-colors"
+                >
+                  Mitra Logistik
+                </a>
+              </div>
 
-            {/* Column 2 */}
-            <div className="flex flex-col gap-6">
-              <h4 className="font-bold text-white tracking-widest text-xs uppercase mb-2">
-                Perusahaan
-              </h4>
-              <Link
-                href="/about"
-                className="text-[#A0AAB2] hover:text-white transition-colors"
-              >
-                Cerita Kami
-              </Link>
-              <Link
-                href="/impact"
-                className="text-[#A0AAB2] hover:text-white transition-colors"
-              >
-                Laporan Dampak
-              </Link>
+              {/* Column 2 */}
+              <div className="flex flex-col gap-6">
+                <h4 className="font-bold text-white tracking-widest text-xs uppercase mb-2">
+                  Perusahaan
+                </h4>
+                <Link
+                  href="/about"
+                  className="text-[#A0AAB2] hover:text-white transition-colors"
+                >
+                  Cerita Kami
+                </Link>
+                <Link
+                  href="/impact"
+                  className="text-[#A0AAB2] hover:text-white transition-colors"
+                >
+                  Laporan Dampak
+                </Link>
+
+                {/* Social Icons */}
+                <div className="flex items-center gap-4 mt-2">
+                  <a
+                    href="https://instagram.com/agrowaste.ub"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Instagram AgroWaste"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-[#A0AAB2] hover:text-white hover:bg-white/10 transition-all hover:-translate-y-1"
+                  >
+                    <FaInstagram className="w-5 h-5" />
+                  </a>
+                  <a
+                    href="https://wa.me/6283861298487"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="WhatsApp AgroWaste"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-[#A0AAB2] hover:text-white hover:bg-white/10 transition-all hover:-translate-y-1"
+                  >
+                    <FaWhatsapp className="w-5 h-5" />
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-center gap-4">
           <p className="text-sm font-bold text-[#A0AAB2]">
             &copy; {new Date().getFullYear()} AgroWaste. Hak cipta dilindungi.
           </p>
-          <div className="flex items-center gap-4">
-            <a
-              href="mailto:arumsalsabila027@gmail.com"
-              aria-label="Email"
-              className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-[#009A44] hover:border-[#009A44] transition-all hover:-translate-y-1"
-            >
-              <Mail className="w-5 h-5" />
-            </a>
-          </div>
         </div>
       </div>
     </footer>

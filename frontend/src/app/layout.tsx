@@ -3,7 +3,7 @@ import "./globals.css";
 import { ToastProvider } from "@/components/admin/Toast";
 
 export const metadata: Metadata = {
-  title: "AgroWaste | Platform Perdagangan Limbah Organik",
+  title: "AgroWaste | Platform Penjualan Limbah Ternak",
   description:
     "Platform pengelolaan dan perdagangan limbah pertanian dan peternakan sirkular.",
   icons: {
