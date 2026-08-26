@@ -12,8 +12,17 @@ import {
   Leaf,
   Sprout,
   Users,
+  Download,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  pdf,
+} from "@react-pdf/renderer";
 
 interface WasteDistributionItem {
   jenis_ternak: string;
@@ -45,6 +54,347 @@ const BAR_COLORS = [
   { bg: "bg-land-secondary", text: "text-land-secondary" },
   { bg: "bg-land-muted", text: "text-land-muted" },
 ];
+
+// ============================================================
+// PDF REPORT — styles, warna, dan komponen dokumen
+// ============================================================
+
+const COLOR_INK = "#1F2A1F";
+const COLOR_ACCENT = "#3F7D3B";
+const COLOR_ACCENT_LIGHT = "#E7F0E4";
+const COLOR_MUTED = "#6B7280";
+const COLOR_CREAM = "#F4EFE6";
+const COLOR_WHITE = "#FFFFFF";
+
+const pdfStyles = StyleSheet.create({
+  page: {
+    padding: 48,
+    paddingTop: 60,
+    paddingBottom: 60,
+    fontFamily: "Helvetica",
+    fontSize: 10,
+    color: "#333333",
+  },
+  headerBar: {
+    position: "absolute",
+    top: 24,
+    left: 48,
+    right: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: COLOR_CREAM,
+    paddingBottom: 8,
+  },
+  headerBrand: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_ACCENT,
+    letterSpacing: 1,
+  },
+  headerSub: { fontSize: 8, color: COLOR_MUTED, marginLeft: 6 },
+  footer: {
+    position: "absolute",
+    bottom: 24,
+    left: 48,
+    right: 48,
+    textAlign: "center",
+    borderTopWidth: 1,
+    borderTopColor: COLOR_CREAM,
+    paddingTop: 8,
+    fontSize: 8,
+    color: COLOR_MUTED,
+  },
+  eyebrow: {
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_MUTED,
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 26,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_INK,
+    marginBottom: 8,
+  },
+  intro: { fontSize: 10, color: "#444444", lineHeight: 1.5, marginBottom: 18 },
+  sectionLabel: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_ACCENT,
+    letterSpacing: 1,
+    borderLeftWidth: 3,
+    borderLeftColor: COLOR_ACCENT,
+    paddingLeft: 8,
+    marginTop: 18,
+    marginBottom: 10,
+  },
+  cardsRow: { flexDirection: "row", gap: 10 },
+  card: {
+    flex: 1,
+    backgroundColor: COLOR_ACCENT_LIGHT,
+    borderRadius: 4,
+    padding: 12,
+  },
+  cardLabel: {
+    fontSize: 7,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_ACCENT,
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  cardValueRow: { flexDirection: "row", alignItems: "baseline" },
+  cardValue: { fontSize: 20, fontFamily: "Helvetica-Bold", color: COLOR_INK },
+  cardUnit: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_MUTED,
+    marginLeft: 4,
+  },
+  table: { borderRadius: 2, overflow: "hidden" },
+  tableHeaderRow: { flexDirection: "row", backgroundColor: COLOR_INK },
+  tableHeaderCell: {
+    padding: 8,
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_WHITE,
+  },
+  tableRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E1D6",
+  },
+  tableCell: { padding: 8, fontSize: 9.5, color: "#222222" },
+  tableCellBold: {
+    padding: 8,
+    fontSize: 9.5,
+    fontFamily: "Helvetica-Bold",
+    color: COLOR_ACCENT,
+  },
+  note: { fontSize: 9.5, color: "#444444", lineHeight: 1.5 },
+  noteItalic: {
+    fontSize: 9,
+    color: COLOR_MUTED,
+    fontStyle: "italic",
+    marginTop: 8,
+  },
+  bold: { fontFamily: "Helvetica-Bold", color: COLOR_ACCENT },
+});
+
+interface ImpactReportPdfProps {
+  data: ImpactData | null;
+  wasteMetric: { value: string; unit: string };
+  co2Metric: { value: string; unit: string };
+  activeSellers: string;
+  carCount: number;
+  jenisLabels: Record<string, string>;
+}
+
+function ImpactReportPdf({
+  data,
+  wasteMetric,
+  co2Metric,
+  activeSellers,
+  carCount,
+  jenisLabels,
+}: ImpactReportPdfProps) {
+  const year = new Date().getFullYear();
+  const generatedDate = new Date().toLocaleDateString("id-ID");
+
+  const summary: [string, string | number, string][] = [
+    ["Total Limbah Organik Terolah", data?.total_waste_managed_kg ?? 0, "kg"],
+    ["Total Reduksi Emisi CO2e", data?.total_co2eq_reduced_kg ?? 0, "kg CO2e"],
+    ["Setara Pohon Tumbuh", data?.equivalent_trees ?? 0, "pohon"],
+    ["Peternak Aktif", data?.active_sellers_count ?? 0, "orang"],
+    ["Total Transaksi", data?.total_transactions ?? 0, "transaksi"],
+    ["Setara Mobil Tidak Beroperasi", carCount, "mobil"],
+  ];
+  const distribution = data?.waste_distribution ?? [];
+  const colWidths = ["58%", "21%", "21%"];
+
+  return (
+    <Document>
+      <Page size="A4" style={pdfStyles.page}>
+        <View style={pdfStyles.headerBar} fixed>
+          <Text style={pdfStyles.headerBrand}>AGROWASTE</Text>
+          <Text style={pdfStyles.headerSub}>• Laporan Transparansi Dampak</Text>
+        </View>
+        <Text
+          style={pdfStyles.footer}
+          fixed
+          render={({ pageNumber, totalPages }) =>
+            `AgroWaste — Merawat Bumi, Satu Limbah Organik Sekali Waktu   |   Halaman ${pageNumber} dari ${totalPages}`
+          }
+        />
+
+        <Text style={pdfStyles.eyebrow}>LAPORAN TRANSPARANSI {year}</Text>
+        <Text style={pdfStyles.title}>Dampak Ekologis Platform AgroWaste</Text>
+        <Text style={pdfStyles.intro}>
+          Dokumen ini merangkum kontribusi kolektif komunitas AgroWaste dalam
+          pengelolaan limbah organik peternakan dan reduksi emisi gas rumah
+          kaca. Data dibuat otomatis pada {generatedDate} berdasarkan transaksi
+          logistik yang terverifikasi pada platform.
+        </Text>
+
+        <Text style={pdfStyles.sectionLabel}>SOROTAN UTAMA</Text>
+        <View style={pdfStyles.cardsRow}>
+          <View style={pdfStyles.card}>
+            <Text style={pdfStyles.cardLabel}>LIMBAH TEROLAH</Text>
+            <View style={pdfStyles.cardValueRow}>
+              <Text style={pdfStyles.cardValue}>{wasteMetric.value}</Text>
+              <Text style={pdfStyles.cardUnit}>{wasteMetric.unit}</Text>
+            </View>
+          </View>
+          <View style={pdfStyles.card}>
+            <Text style={pdfStyles.cardLabel}>CO2E TEREDUKSI</Text>
+            <View style={pdfStyles.cardValueRow}>
+              <Text style={pdfStyles.cardValue}>{co2Metric.value}</Text>
+              <Text style={pdfStyles.cardUnit}>{co2Metric.unit}</Text>
+            </View>
+          </View>
+          <View style={pdfStyles.card}>
+            <Text style={pdfStyles.cardLabel}>PETERNAK AKTIF</Text>
+            <View style={pdfStyles.cardValueRow}>
+              <Text style={pdfStyles.cardValue}>{activeSellers}</Text>
+              <Text style={pdfStyles.cardUnit}>orang</Text>
+            </View>
+          </View>
+        </View>
+
+        <Text style={pdfStyles.sectionLabel}>RINGKASAN DAMPAK PLATFORM</Text>
+        <View style={pdfStyles.table}>
+          <View style={pdfStyles.tableHeaderRow}>
+            <Text style={[pdfStyles.tableHeaderCell, { width: colWidths[0] }]}>
+              Metrik
+            </Text>
+            <Text
+              style={[
+                pdfStyles.tableHeaderCell,
+                { width: colWidths[1], textAlign: "right" },
+              ]}
+            >
+              Nilai
+            </Text>
+            <Text style={[pdfStyles.tableHeaderCell, { width: colWidths[2] }]}>
+              Satuan
+            </Text>
+          </View>
+          {summary.map((row, i) => (
+            <View
+              key={i}
+              style={[
+                pdfStyles.tableRow,
+                { backgroundColor: i % 2 === 0 ? "#FFFFFF" : COLOR_CREAM },
+              ]}
+              wrap={false}
+            >
+              <Text style={[pdfStyles.tableCell, { width: colWidths[0] }]}>
+                {row[0]}
+              </Text>
+              <Text
+                style={[
+                  pdfStyles.tableCellBold,
+                  { width: colWidths[1], textAlign: "right" },
+                ]}
+              >
+                {row[1]}
+              </Text>
+              <Text
+                style={[
+                  pdfStyles.tableCell,
+                  { width: colWidths[2], color: "#555555" },
+                ]}
+              >
+                {row[2]}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <Text style={pdfStyles.sectionLabel}>
+          DISTRIBUSI LIMBAH PER JENIS TERNAK
+        </Text>
+        {distribution.length > 0 ? (
+          <View style={pdfStyles.table}>
+            <View style={pdfStyles.tableHeaderRow}>
+              <Text
+                style={[pdfStyles.tableHeaderCell, { width: colWidths[0] }]}
+              >
+                Jenis Ternak
+              </Text>
+              <Text
+                style={[
+                  pdfStyles.tableHeaderCell,
+                  { width: colWidths[1], textAlign: "right" },
+                ]}
+              >
+                Total (kg)
+              </Text>
+              <Text
+                style={[
+                  pdfStyles.tableHeaderCell,
+                  { width: colWidths[2], textAlign: "right" },
+                ]}
+              >
+                Persentase (%)
+              </Text>
+            </View>
+            {distribution.map((item, i) => (
+              <View
+                key={item.jenis_ternak}
+                style={[
+                  pdfStyles.tableRow,
+                  { backgroundColor: i % 2 === 0 ? "#FFFFFF" : COLOR_CREAM },
+                ]}
+              >
+                <Text style={[pdfStyles.tableCell, { width: colWidths[0] }]}>
+                  {jenisLabels[item.jenis_ternak] ?? item.jenis_ternak}
+                </Text>
+                <Text
+                  style={[
+                    pdfStyles.tableCell,
+                    { width: colWidths[1], textAlign: "right" },
+                  ]}
+                >
+                  {item.total_kg}
+                </Text>
+                <Text
+                  style={[
+                    pdfStyles.tableCell,
+                    { width: colWidths[2], textAlign: "right" },
+                  ]}
+                >
+                  {item.percentage}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={pdfStyles.noteItalic}>
+            Belum ada data distribusi limbah pada periode laporan ini.
+          </Text>
+        )}
+
+        <Text style={pdfStyles.sectionLabel}>CATATAN</Text>
+        <Text style={pdfStyles.note}>
+          Setiap transaksi di AgroWaste mendukung pencapaian{" "}
+          <Text style={pdfStyles.bold}>SDG 12</Text> (Konsumsi &amp; Produksi
+          Bertanggung Jawab) dan <Text style={pdfStyles.bold}>SDG 13</Text>{" "}
+          (Aksi Iklim).
+        </Text>
+        <Text style={pdfStyles.noteItalic}>
+          Angka pada laporan ini bersifat dinamis dan diperbarui otomatis
+          mengikuti data transaksi terbaru pada sistem.
+        </Text>
+      </Page>
+    </Document>
+  );
+}
+
+// ============================================================
+// HALAMAN UTAMA
+// ============================================================
 
 export default function ImpactPage() {
   const [data, setData] = useState<ImpactData | null>(null);
@@ -98,6 +448,29 @@ export default function ImpactPage() {
     ? data.active_sellers_count.toLocaleString("id-ID")
     : "0";
 
+  const handleDownload = async () => {
+    const year = new Date().getFullYear();
+    const fileName = `Laporan Transparansi ${year} AgroWaste`;
+
+    const blob = await pdf(
+      <ImpactReportPdf
+        data={data}
+        wasteMetric={wasteMetric}
+        co2Metric={co2Metric}
+        activeSellers={activeSellers}
+        carCount={carCount}
+        jenisLabels={JENIS_LABELS}
+      />,
+    ).toBlob();
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${fileName}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <div className="flex-1 bg-land-bg min-h-screen pb-20 flex flex-col items-center justify-center">
@@ -115,8 +488,8 @@ export default function ImpactPage() {
       <div className="max-w-7xl mx-auto px-6 pt-4 md:pt-8 mb-6">
         <div className="text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full text-land-accent text-xs font-bold tracking-widest uppercase mb-4 shadow-sm border border-land-cream">
-            <Globe2 className="w-4 h-4 text-land-accent" /> Laporan Transparansi
-            2026
+            <Globe2 className="w-4 h-4 text-land-accent" /> Laporan Transparansi{" "}
+            {new Date().getFullYear()}
           </div>
           <h1
             className="text-5xl md:text-7xl font-land-heading font-bold text-land-ink leading-tight mb-8"
@@ -132,6 +505,14 @@ export default function ImpactPage() {
             Bersama-sama kita mengubah limbah yang membusuk menjadi kehidupan
             baru bagi tanah pertanian Indonesia.
           </p>
+          <button
+            onClick={handleDownload}
+            disabled={loading || !data}
+            className="mt-8 inline-flex items-center justify-center gap-3 bg-land-accent hover:bg-land-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold py-3.5 px-8 transition-colors shadow-md cursor-pointer"
+          >
+            <Download className="w-5 h-5" />
+            Download Laporan Transparansi
+          </button>
         </div>
       </div>
 

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { Marquee } from "@/components/public/Marquee";
 import { apiFetch } from "@/lib/api";
+import Image from "next/image";
+import { MapPin } from "lucide-react";
 
 interface ImpactData {
   total_waste_managed_kg: number;
@@ -187,8 +189,14 @@ export default function AboutPage() {
 
             {/* SDG 13 Card */}
             <div className="md:col-span-6 bg-[#1C231F] rounded-[40px] p-10 shadow-lg text-white flex flex-col md:flex-row gap-8 items-center group hover:-translate-y-2 transition-transform duration-500">
-              <div className="w-24 h-24 rounded-full bg-[#009A44]/20 flex items-center justify-center shrink-0 group-hover:bg-[#009A44]/40 transition-colors">
-                <TreePine className="w-12 h-12 text-[#4ADE80]" />
+              <div className="w-24 h-24 rounded-full bg-[#3F7E44] flex items-center justify-center shrink-0 group-hover:bg-[#3F7E44] transition-colors overflow-hidden p-4">
+                <Image
+                  src="/sdg/13.png"
+                  alt="SDG 13 - Penanganan Perubahan Iklim"
+                  width={64}
+                  height={64}
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
                 <div className="text-[10px] font-bold tracking-widest uppercase text-[#4ADE80] mb-3">
@@ -207,7 +215,7 @@ export default function AboutPage() {
             {/* Transparency Card */}
             <div className="md:col-span-6 bg-white rounded-[40px] p-10 shadow-sm border border-white flex flex-col md:flex-row gap-8 items-center group hover:-translate-y-2 transition-transform duration-500">
               <div className="w-24 h-24 rounded-full bg-blue-50 flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition-colors">
-                <Navigation className="w-10 h-10 text-blue-500" />
+                <MapPin className="w-10 h-10 text-blue-500" />
               </div>
               <div>
                 <div className="text-[10px] font-bold tracking-widest uppercase text-blue-500 mb-3">
@@ -218,7 +226,7 @@ export default function AboutPage() {
                 </h3>
                 <p className="text-land-muted text-sm leading-relaxed">
                   Pelacakan distribusi perpindahan limbah secara langsung
-                  (*real-time*) memastikan keadilan harga dan efisiensi rute
+                  (real-time) memastikan keadilan harga dan efisiensi rute
                   pengiriman.
                 </p>
               </div>
@@ -332,9 +340,7 @@ export default function AboutPage() {
             <LineChart className="w-16 h-16 text-[#4ADE80] mx-auto mb-8" />
             <h2 className="text-4xl md:text-6xl font-land-heading font-bold text-white mb-8 leading-tight">
               Lebih dari{" "}
-              <span className="text-[#009A44]">
-                {data ? wasteText : "..."}
-              </span>
+              <span className="text-[#009A44]">{data ? wasteText : "..."}</span>
               <br />
               limbah telah diselamatkan.
             </h2>
