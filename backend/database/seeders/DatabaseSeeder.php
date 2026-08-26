@@ -16,7 +16,7 @@ class DatabaseSeeder extends Seeder
     {
         // Memanggil seeder utama AgroWaste yang berisi akun demo & data realistis
         $this->call([
-            AgroWasteSeeder::class,
+            AdminSeeder::class,
         ]);
     }
 }
