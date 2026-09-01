@@ -19,11 +19,11 @@ class ProfileController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
         $user->load(['peternakProfile', 'buyerProfile', 'logistikProfile']);
-        
+
         return response()->json([
-            'success' => true, 
-            'message' => 'Data profil berhasil diambil.', 
-            'data'    => $user
+            'success' => true,
+            'message' => 'Data profil berhasil diambil.',
+            'data' => $user
         ], 200);
     }
 
@@ -90,9 +90,9 @@ class ProfileController extends Controller
         $user->load(['peternakProfile', 'buyerProfile', 'logistikProfile']);
 
         return response()->json([
-            'success' => true, 
-            'message' => 'Profil berhasil diperbarui.', 
-            'data'    => $user
+            'success' => true,
+            'message' => 'Profil berhasil diperbarui.',
+            'data' => $user
         ], 200);
     }
 
@@ -111,7 +111,7 @@ class ProfileController extends Controller
         if ($request->hasFile('avatar')) {
             $file = $request->file('avatar');
             $path = $file->store('avatars', 'public');
-            
+
             // Hapus avatar lama jika ada di storage lokal
             if ($user->avatar_url && str_contains($user->avatar_url, 'storage/avatars')) {
                 $oldPath = str_replace(asset('storage/'), '', $user->avatar_url);
@@ -133,5 +133,62 @@ class ProfileController extends Controller
             'success' => false,
             'message' => 'Gagal mengunggah foto profil.'
         ], 400);
+    }
+    /**
+     * Menghapus foto profil pengguna
+     */
+    public function deleteAvatar(): JsonResponse
+    {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+
+        if (!$user->avatar_url) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tidak ada foto profil untuk dihapus.'
+            ], 400);
+        }
+
+        // Hapus file dari storage lokal jika ada
+        if (str_contains($user->avatar_url, 'storage/avatars')) {
+            $oldPath = str_replace(asset('storage/'), '', $user->avatar_url);
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($oldPath);
+        }
+
+        $user->update(['avatar_url' => null]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Foto profil berhasil dihapus.',
+            'data' => $user->fresh()
+        ]);
+    }
+    public function changePassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+
+        try {
+            app(\App\Services\AuthService::class)->changePassword(
+                $user,
+                $request->current_password,
+                $request->new_password
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Kata sandi berhasil diperbarui.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 }

@@ -106,6 +106,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\ProfileController::class, 'show']);
             Route::put('/', [\App\Http\Controllers\Api\ProfileController::class, 'update']);
             Route::post('/avatar', [\App\Http\Controllers\Api\ProfileController::class, 'uploadAvatar']);
+            Route::delete('/avatar', [\App\Http\Controllers\Api\ProfileController::class, 'deleteAvatar']);
+            Route::put('/password', [\App\Http\Controllers\Api\ProfileController::class, 'changePassword']); 
         });
 
         // Logistik Routes (Hanya Mitra Logistik)

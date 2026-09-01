@@ -24,54 +24,62 @@ class AuthController extends Controller
     {
         try {
             $user = $this->authService->registerUser($request->validated());
-            
+
             // Buat token Sanctum
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
                 'success' => true,
                 'message' => 'Registrasi berhasil.',
-                'data'    => [
-                    'user'  => $user,
+                'data' => [
+                    'user' => $user,
                     'token' => $token
                 ]
             ], 201);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal melakukan registrasi: ' . $e->getMessage(),
-                'data'    => null
+                'data' => null
             ], 500);
         }
     }
 
     public function login(LoginRequest $request): JsonResponse
     {
-        $user = $this->authService->attemptLogin(
-            $request->validated('email'), 
-            $request->validated('password')
-        );
+        try {
+            $user = $this->authService->attemptLogin(
+                $request->validated('email'),
+                $request->validated('password')
+            );
 
-        if (!$user) {
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Email atau password salah.',
+                    'errors' => ['email' => ['Kredensial tidak cocok.']]
+                ], 401);
+            }
+
+            // untuk hapus token lama agar aman dan menampilkan token baru
+            $user->tokens()->delete();
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Login berhasil.',
+                'data' => [
+                    'user' => $user,
+                    'token' => $token
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Email atau password salah.',
-                'errors'  => ['email' => ['Kredensial tidak cocok.']]
-            ], 401);
+                'message' => $e->getMessage(),
+            ], 403);
         }
-
-        // Hapus token lama agar aman, lalu buat token baru
-        $user->tokens()->delete();
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Login berhasil.',
-            'data'    => [
-                'user'  => $user,
-                'token' => $token
-            ]
-        ], 200);
     }
 }

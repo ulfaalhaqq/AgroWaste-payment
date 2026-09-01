@@ -12,7 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Auth\Notifications\ResetPassword; // tambah ini
 
-#[Fillable(['id', 'name', 'email', 'password', 'role', 'phone', 'avatar_url'])]
+#[Fillable(['id', 'name', 'email', 'password', 'role', 'phone', 'avatar_url', 'is_suspended'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -26,6 +26,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_suspended' => 'boolean',
         ];
     }
 
