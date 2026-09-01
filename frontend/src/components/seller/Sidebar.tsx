@@ -6,14 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { logout } from "@/lib/auth";
 
-interface UserProfile {
-  name: string;
-  avatar_url?: string;
-  peternak_profile?: {
-    nama_peternakan: string;
-  };
-}
-
 interface SidebarProps {
   mobileOpen?: boolean;
   onClose?: () => void;
@@ -23,30 +15,9 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [farmName, setFarmName] = useState("AgroWaste Merchant");
-  const [avatarUrl, setAvatarUrl] = useState("");
   const [newOrdersCount, setNewOrdersCount] = useState(0);
 
   useEffect(() => {
-    apiFetch("/profile")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json) => {
-        if (json?.success && json?.data) {
-          const user = json.data as UserProfile;
-          if (user.peternak_profile?.nama_peternakan) {
-            setFarmName(user.peternak_profile.nama_peternakan);
-          } else {
-            setFarmName(user.name);
-          }
-          if (user.avatar_url) {
-            setAvatarUrl(user.avatar_url);
-          } else {
-            setAvatarUrl("");
-          }
-        }
-      })
-      .catch(() => {});
-
     // badge count for new orders
     apiFetch("/seller/dashboard")
       .then((r) => (r.ok ? r.json() : null))
@@ -65,9 +36,9 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
 
   const menuItems = [
     {
-      name: "Ringkasan",
+      name: "Dashboard",
       path: "/seller",
-      icon: "M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z",
+      icon: "M3 12l9-9 9 9M4 10v10a1 1 0 001 1h5v-6h4v6h5a1 1 0 001-1V10",
     },
     {
       name: "Inventaris",
@@ -92,8 +63,6 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
     },
   ];
 
-  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(farmName)}&background=3F4F44&color=fff&rounded=true`;
-
   return (
     <aside
       className={`
@@ -104,7 +73,7 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       aria-label="Navigasi seller"
     >
       {/* Brand Header */}
-      <div className="h-20 flex items-center justify-between px-6 pt-4">
+      <div className="h-20 flex items-center justify-between px-6 pt-4 mb-4">
         <Link
           href="/seller"
           className="flex items-center gap-2"
@@ -136,28 +105,6 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
             />
           </svg>
         </button>
-      </div>
-
-      {/* Profile */}
-      <div className="px-6 py-6 border-b border-seller-hairline/50 mb-4">
-        <div className="flex items-center gap-3">
-          <img
-            src={avatarUrl || fallbackAvatar}
-            alt="Avatar"
-            className="w-10 h-10 object-cover rounded-full shadow-sm"
-          />
-          <div className="min-w-0 flex-1">
-            <span className="text-[10px] text-seller-primary font-bold uppercase tracking-wider block leading-tight">
-              Peternak Panel
-            </span>
-            <h2
-              className="text-xs font-bold text-seller-textprimary leading-tight mt-0.5 truncate"
-              title={farmName}
-            >
-              {farmName}
-            </h2>
-          </div>
-        </div>
       </div>
 
       {/* Navigation */}

@@ -202,24 +202,31 @@ export default function AdminLogistics() {
     }
   };
 
+  // ==========================================================
+  // Kondisi status dipusatkan di satu tempat agar kartu KPI dan
+  // tab filter selalu konsisten (tidak ada lagi kategori yang
+  // berbeda antara statistik dan daftar tabel).
+  // ==========================================================
+  const isSedangKirim = (o: Order) => o.status === "dikirim";
+  const isTerkirim = (o: Order) => o.status === "selesai";
+  const isMasalah = (o: Order) =>
+    o.status === "dibatalkan" || o.status === "ditolak";
+
   const filteredOrders = orders.filter((order) => {
     if (activeTab === "Semua") return true;
-    if (activeTab === "Sedang Kirim") return order.status === "dikirim";
-    if (activeTab === "Terkirim") return order.status === "selesai";
-    if (activeTab === "Masalah")
-      return order.status === "dibatalkan" || order.status === "ditolak";
+    if (activeTab === "Sedang Kirim") return isSedangKirim(order);
+    if (activeTab === "Terkirim") return isTerkirim(order);
+    if (activeTab === "Masalah") return isMasalah(order);
     return true;
   });
 
   const totalShipmentsCount = orders.length;
-  const activeShipmentsCount = orders.filter(
-    (o) => o.status === "dikirim",
-  ).length;
-  const pendingAssignmentCount = orders.filter(
-    (o) => o.status === "dikonfirmasi",
-  ).length;
+  const sedangKirimCount = orders.filter(isSedangKirim).length;
+  const terkirimCount = orders.filter(isTerkirim).length;
+  const masalahCount = orders.filter(isMasalah).length;
 
-  // "late" = dikirim > 24 hours ago and not yet selesai
+  // Info tambahan (bukan bagian dari 4 kartu utama, biar tidak
+  // tumpang tindih dengan kategori pada tab filter)
   const lateShipmentsCount = orders.filter((o) => {
     if (o.status !== "dikirim") return false;
     const shippedDate = new Date(o.updated_at);
@@ -316,9 +323,19 @@ export default function AdminLogistics() {
           </div>
         </div>
 
-        {/* KPI Cards */}
+        {/* Info Terlambat (info tambahan, terpisah dari 4 kartu utama) */}
+        {!loading && lateShipmentsCount > 0 && (
+          <div className="flex items-center gap-2 px-4 py-3 bg-admin-semred/5 border border-admin-semred/20 rounded-xl text-xs font-semibold text-admin-semred">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            {lateShipmentsCount} pengiriman sudah berjalan lebih dari 24 jam dan belum selesai.
+          </div>
+        )}
+
+        {/* KPI Cards — disamakan persis dengan 4 tab filter di bawah */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* KPI 1 */}
+          {/* KPI 1 — Semua */}
           <div className="bg-admin-surfacewhite border border-admin-hairline rounded-2xl p-6 relative group overflow-hidden">
             <div className="absolute right-0 top-0 w-24 h-24 bg-admin-primary/5 rounded-bl-full -mr-4 -mt-4"></div>
             <div className="w-10 h-10 bg-admin-primary-light text-admin-primary rounded-xl flex items-center justify-center mb-4">
@@ -344,7 +361,7 @@ export default function AdminLogistics() {
             </div>
           </div>
 
-          {/* KPI 2 */}
+          {/* KPI 2 — Sedang Kirim */}
           <div className="bg-admin-surfacewhite border border-admin-hairline rounded-2xl p-6 relative group overflow-hidden">
             <div className="absolute right-0 top-0 w-24 h-24 bg-blue-500/5 rounded-bl-full -mr-4 -mt-4"></div>
             <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center mb-4">
@@ -363,17 +380,17 @@ export default function AdminLogistics() {
               </svg>
             </div>
             <span className="text-[10px] font-bold text-admin-textsecondary tracking-wider uppercase block mb-1">
-              SEDANG BERJALAN
+              SEDANG KIRIM
             </span>
             <div className="text-3xl font-bold font-tabular text-admin-textprimary">
-              {loading ? "..." : activeShipmentsCount.toLocaleString("id-ID")}
+              {loading ? "..." : sedangKirimCount.toLocaleString("id-ID")}
             </div>
           </div>
 
-          {/* KPI 3 */}
+          {/* KPI 3 — Terkirim */}
           <div className="bg-admin-surfacewhite border border-admin-hairline rounded-2xl p-6 relative group overflow-hidden">
-            <div className="absolute right-0 top-0 w-24 h-24 bg-admin-semamber/5 rounded-bl-full -mr-4 -mt-4"></div>
-            <div className="w-10 h-10 bg-amber-50 text-admin-semamber rounded-xl flex items-center justify-center mb-4">
+            <div className="absolute right-0 top-0 w-24 h-24 bg-admin-semgreen/5 rounded-bl-full -mr-4 -mt-4"></div>
+            <div className="w-10 h-10 bg-admin-semgreen/10 text-admin-semgreen rounded-xl flex items-center justify-center mb-4">
               <svg
                 className="w-5 h-5"
                 fill="none"
@@ -384,19 +401,19 @@ export default function AdminLogistics() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                  d="M5 13l4 4L19 7"
                 />
               </svg>
             </div>
             <span className="text-[10px] font-bold text-admin-textsecondary tracking-wider uppercase block mb-1">
-              MENUNGGU PENUGASAN
+              TERKIRIM
             </span>
-            <div className="text-3xl font-bold font-tabular text-admin-textprimary text-admin-semamber">
-              {loading ? "..." : pendingAssignmentCount.toLocaleString("id-ID")}
+            <div className="text-3xl font-bold font-tabular text-admin-semgreen">
+              {loading ? "..." : terkirimCount.toLocaleString("id-ID")}
             </div>
           </div>
 
-          {/* KPI 4 */}
+          {/* KPI 4 — Masalah */}
           <div className="bg-admin-surfacewhite border border-admin-hairline rounded-2xl p-6 relative group overflow-hidden">
             <div className="absolute right-0 top-0 w-24 h-24 bg-admin-semred/5 rounded-bl-full -mr-4 -mt-4"></div>
             <div className="w-10 h-10 bg-red-50 text-admin-semred rounded-xl flex items-center justify-center mb-4">
@@ -415,10 +432,10 @@ export default function AdminLogistics() {
               </svg>
             </div>
             <span className="text-[10px] font-bold text-admin-textsecondary tracking-wider uppercase block mb-1">
-              TERLAMBAT (&gt;24J)
+              MASALAH
             </span>
             <div className="text-3xl font-bold font-tabular text-admin-semred">
-              {loading ? "..." : lateShipmentsCount.toLocaleString("id-ID")}
+              {loading ? "..." : masalahCount.toLocaleString("id-ID")}
             </div>
           </div>
         </div>

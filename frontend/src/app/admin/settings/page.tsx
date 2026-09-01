@@ -4,11 +4,13 @@ import React, { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useToast } from "@/components/admin/Toast";
+import TwoFactorModal from "@/components/common/TwoFactorModal";
 
 export default function SettingsPage() {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState("personal");
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+  const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [showMobileSession, setShowMobileSession] = useState(true);
 
@@ -75,10 +77,37 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSavePassword = (e: React.FormEvent) => {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+
+  const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSuccessModalOpen(true);
-    (e.target as HTMLFormElement).reset();
+    setPasswordSubmitting(true);
+    try {
+      const res = await apiFetch("/profile/password", {
+        method: "PUT",
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+          new_password_confirmation: confirmPassword,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setIsSuccessModalOpen(true);
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        showToast(json.message ?? "Gagal memperbarui kata sandi.", "error");
+      }
+    } catch {
+      showToast("Gagal terhubung ke server.", "error");
+    } finally {
+      setPasswordSubmitting(false);
+    }
   };
 
   const handleAvatarUpload = async (file: File) => {
@@ -86,14 +115,17 @@ export default function SettingsPage() {
     const formData = new FormData();
     formData.append("avatar", file);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("agrowaste_token") : null;
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("agrowaste_token")
+          : null;
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000"}/profile/avatar`,
         {
           method: "POST",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
-        }
+        },
       );
       const json = await res.json();
       if (res.ok && json.success) {
@@ -107,10 +139,6 @@ export default function SettingsPage() {
     } finally {
       setAvatarUploading(false);
     }
-  };
-
-  const toggle2FA = () => {
-    setIs2FAEnabled(!is2FAEnabled);
   };
 
   const revokeMobileSession = () => {
@@ -182,23 +210,57 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-6 mb-8">
                     <div className="relative group w-20 h-20 rounded-full overflow-hidden shadow-sm border border-admin-hairline cursor-pointer">
                       <img
-                        src={profileAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(profileName || "Admin")}&background=3F4F44&color=fff&rounded=true`}
+                        src={
+                          profileAvatarUrl ||
+                          `https://ui-avatars.com/api/?name=${encodeURIComponent(profileName || "Admin")}&background=3F4F44&color=fff&rounded=true`
+                        }
                         alt="Foto Profil"
                         className="w-full h-full object-cover"
                       />
                       <label className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                         {avatarUploading ? (
-                          <svg className="animate-spin w-5 h-5 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                          <svg
+                            className="animate-spin w-5 h-5 text-white"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                            />
                           </svg>
                         ) : (
-                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                          <svg
+                            className="w-5 h-5 text-white"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                            />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
                           </svg>
                         )}
-                        <span className="text-[9px] text-white font-bold mt-1">{avatarUploading ? "Mengupload..." : "Ganti Foto"}</span>
+                        <span className="text-[9px] text-white font-bold mt-1">
+                          {avatarUploading ? "Mengupload..." : "Ganti Foto"}
+                        </span>
                         <input
                           type="file"
                           accept="image/jpeg,image/png,image/jpg,image/gif"
@@ -327,6 +389,8 @@ export default function SettingsPage() {
                         <input
                           type="password"
                           required
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
                           className="w-full px-4 py-2.5 bg-admin-warmbg border border-admin-hairline rounded-xl text-sm text-admin-textprimary focus:outline-none focus:ring-1 focus:ring-admin-primary"
                         />
                       </div>
@@ -337,6 +401,9 @@ export default function SettingsPage() {
                         <input
                           type="password"
                           required
+                          minLength={8}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
                           className="w-full px-4 py-2.5 bg-admin-warmbg border border-admin-hairline rounded-xl text-sm text-admin-textprimary focus:outline-none focus:ring-1 focus:ring-admin-primary"
                         />
                       </div>
@@ -347,6 +414,9 @@ export default function SettingsPage() {
                         <input
                           type="password"
                           required
+                          minLength={8}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
                           className="w-full px-4 py-2.5 bg-admin-warmbg border border-admin-hairline rounded-xl text-sm text-admin-textprimary focus:outline-none focus:ring-1 focus:ring-admin-primary"
                         />
                       </div>
@@ -354,9 +424,10 @@ export default function SettingsPage() {
                     <div className="flex justify-end pt-2">
                       <button
                         type="submit"
-                        className="px-6 py-2.5 bg-admin-primary hover:bg-admin-primary-hover text-white font-bold text-xs rounded-xl shadow-sm transition-all"
+                        disabled={passwordSubmitting}
+                        className="px-6 py-2.5 bg-admin-primary hover:bg-admin-primary-hover text-white font-bold text-xs rounded-xl shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        Perbarui Sandi
+                        {passwordSubmitting ? "Menyimpan..." : "Perbarui Sandi"}
                       </button>
                     </div>
                   </form>
@@ -379,10 +450,19 @@ export default function SettingsPage() {
                     </p>
                   </div>
                   <button
-                    onClick={toggle2FA}
+                    type="button"
+                    onClick={() => {
+                      if (is2FAEnabled) {
+                        setIs2FAEnabled(false);
+                      } else {
+                        setIs2FAModalOpen(true);
+                      }
+                    }}
                     className="px-4 py-2 bg-admin-warmbg hover:bg-admin-hairline text-admin-textprimary font-bold text-xs rounded-xl transition-all shrink-0"
                   >
-                    {is2FAEnabled ? "Nonaktifkan 2FA" : "Aktifkan 2FA"}
+                    {is2FAEnabled
+                      ? "Nonaktifkan 2FA"
+                      : "Aktifkan 2FA (Scan QR)"}
                   </button>
                 </div>
               </div>
@@ -564,6 +644,18 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* 2FA Google Authenticator Modal */}
+      <TwoFactorModal
+        isOpen={is2FAModalOpen}
+        userEmail={profileEmail || "admin@agrowaste.id"}
+        userName={profileName || "Administrator"}
+        onClose={() => setIs2FAModalOpen(false)}
+        onSuccess={() => {
+          setIs2FAEnabled(true);
+          setIsSuccessModalOpen(true);
+        }}
+      />
     </>
   );
 }

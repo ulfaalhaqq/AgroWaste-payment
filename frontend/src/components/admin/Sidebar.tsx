@@ -15,20 +15,8 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingCount, setPendingCount] = useState<number | null>(null);
-  const [adminName, setAdminName] = useState("Administrator Utama");
-  const [adminAvatar, setAdminAvatar] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch("/profile")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json) => {
-        if (json?.success && json?.data) {
-          if (json.data.name) setAdminName(json.data.name);
-          if (json.data.avatar_url) setAdminAvatar(json.data.avatar_url);
-        }
-      })
-      .catch(() => {});
-
     apiFetch("/admin/products")
       .then((res) => (res.ok ? res.json() : { data: [] }))
       .then((json) => {
@@ -48,9 +36,9 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
 
   const menuItems = [
     {
-      name: "Ringkasan",
+      name: "Dashboard",
       path: "/admin",
-      icon: "M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z",
+      icon: "M3 12l9-9 9 9M4 10v10a1 1 0 001 1h5v-6h4v6h5a1 1 0 001-1V10",
     },
     {
       name: "Manajemen Pengguna",
@@ -91,7 +79,7 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
       aria-label="Navigasi admin"
     >
       {/* Brand header */}
-      <div className="h-20 flex items-center justify-between px-6 pt-4">
+      <div className="h-20 flex items-center justify-between px-6 pt-4 mb-4">
         <Link
           href="/admin"
           className="flex items-center gap-2"
@@ -123,31 +111,6 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
             />
           </svg>
         </button>
-      </div>
-
-      {/* Profile */}
-      <div className="px-6 py-6 border-b border-admin-hairline/50 mb-4">
-        <div className="flex items-center gap-3">
-          {adminAvatar ? (
-            <img
-              src={adminAvatar}
-              alt="Admin Avatar"
-              className="w-10 h-10 rounded-full object-cover border border-admin-hairline shadow-sm"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-admin-primary text-white flex items-center justify-center font-bold shadow-sm">
-              {adminName.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div>
-            <span className="text-[10px] text-admin-primary font-bold uppercase tracking-wider block leading-tight">
-              Panel Sistem
-            </span>
-            <h2 className="text-xs font-bold text-admin-textprimary leading-tight mt-0.5 truncate max-w-[130px]">
-              {adminName}
-            </h2>
-          </div>
-        </div>
       </div>
 
       {/* Navigation */}

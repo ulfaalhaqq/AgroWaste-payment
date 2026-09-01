@@ -101,7 +101,7 @@ export default function CourierDashboard() {
 
   // draw active/scheduled routes on overview map
   useEffect(() => {
-    if (!leafletLoaded || shipments.length === 0) return;
+    if (!leafletLoaded) return;
     const L = window.L;
     if (!L) return;
 
@@ -111,7 +111,7 @@ export default function CourierDashboard() {
 
     let map = mapInstance;
     if (!map) {
-      map = L.map("overview-map").setView([-6.5971, 106.7973], 11);
+      map = L.map("overview-map").setView([-7.9666, 112.6326], 12);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors",
       }).addTo(map);
@@ -409,7 +409,7 @@ export default function CourierDashboard() {
             {/* GIS Overview map */}
             <div
               id="overview-map"
-              className="h-64 bg-gray-900 w-full"
+              className="h-64 bg-gray-100 w-full"
               style={{ zIndex: 1, minHeight: "256px" }}
             />
 

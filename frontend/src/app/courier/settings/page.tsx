@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
 import { saveAuth, getToken } from "@/lib/auth";
 import { calculateDeliveryCost } from "@/lib/location";
+import TwoFactorModal from "@/components/common/TwoFactorModal";
 
 const MotorIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg
@@ -222,6 +223,7 @@ export default function CourierSettings() {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("profil");
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+  const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -233,6 +235,8 @@ export default function CourierSettings() {
   );
   const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarDeleting, setAvatarDeleting] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const [lat, setLat] = useState<string>("");
   const [lng, setLng] = useState<string>("");
@@ -259,11 +263,43 @@ export default function CourierSettings() {
       const json = await res.json();
       if (res.ok && json.success) {
         setAvatarUrl(json.data?.avatar_url ?? "");
+      } else {
+        setErrorMsg(json.message || "Gagal mengupload foto profil.");
       }
     } catch {
-      // silent fail
+      setErrorMsg("Tidak dapat terhubung ke server saat upload foto.");
     } finally {
       setAvatarUploading(false);
+    }
+  };
+
+  const handleAvatarDelete = () => {
+    if (!avatarUrl) return;
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const confirmAvatarDelete = async () => {
+    setIsDeleteConfirmOpen(false);
+    setAvatarDeleting(true);
+    try {
+      const token = getToken();
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000"}/profile/avatar`,
+        {
+          method: "DELETE",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setAvatarUrl("");
+      } else {
+        setErrorMsg(json.message || "Gagal menghapus foto profil.");
+      }
+    } catch {
+      setErrorMsg("Tidak dapat terhubung ke server saat menghapus foto.");
+    } finally {
+      setAvatarDeleting(false);
     }
   };
 
@@ -440,17 +476,13 @@ export default function CourierSettings() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: Profile Card */}
           <div className="lg:col-span-4 bg-courier-surfacewhite border border-courier-hairline rounded-2xl p-8 shadow-sm flex flex-col items-center text-center">
-            <div className="w-32 h-32 rounded-2xl bg-courier-primary/10 mb-6 p-2 relative group cursor-pointer">
-              <div className="absolute inset-0 bg-courier-primary rounded-2xl overflow-hidden">
-                <div className="absolute top-2 left-2 w-8 h-8 rounded-full border border-white/20"></div>
-                <div className="absolute bottom-4 right-4 w-12 h-12 rounded-full border border-white/20"></div>
-              </div>
+            <div className="w-32 h-32 rounded-full mb-6 relative group">
               <img
                 src={avatarUrl || fallbackAvatar}
                 alt={fullName}
-                className="w-full h-full rounded-xl object-cover relative z-10 border-2 border-white shadow-md"
+                className="w-full h-full rounded-full object-cover border-4 border-courier-primary/10 shadow-md"
               />
-              <label className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-20">
+              <label className="absolute inset-0 rounded-full flex flex-col items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-20">
                 {avatarUploading ? (
                   <svg className="animate-spin w-6 h-6 text-white" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
@@ -467,13 +499,35 @@ export default function CourierSettings() {
                   type="file"
                   accept="image/jpeg,image/png,image/jpg,image/gif"
                   className="hidden"
-                  disabled={avatarUploading}
+                  disabled={avatarUploading || avatarDeleting}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleAvatarUpload(file);
                   }}
                 />
               </label>
+
+              {/* Tombol hapus foto - selalu terlihat kalau ada foto custom */}
+              {avatarUrl && (
+                <button
+                  type="button"
+                  onClick={handleAvatarDelete}
+                  disabled={avatarDeleting || avatarUploading}
+                  title="Hapus foto profil"
+                  className="absolute -bottom-1 -right-1 w-9 h-9 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-md border-2 border-white z-30 transition-colors disabled:opacity-60 cursor-pointer"
+                >
+                  {avatarDeleting ? (
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </button>
+              )}
             </div>
             <h3 className="text-lg font-bold text-courier-textprimary">
               {fullName}
@@ -481,7 +535,9 @@ export default function CourierSettings() {
             <p className="text-sm text-courier-textsecondary mb-2">
               {companyName || "Mitra Logistik"}
             </p>
-            <p className="text-[10px] text-courier-textsecondary">Klik foto untuk mengubah</p>
+            <p className="text-[10px] text-courier-textsecondary">
+              Klik foto untuk mengubah{avatarUrl ? ", atau tekan tombol silang untuk menghapus" : ""}
+            </p>
           </div>
 
           {/* Right Column: Settings Forms & Security */}
@@ -869,10 +925,16 @@ export default function CourierSettings() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIs2FAEnabled(!is2FAEnabled)}
+                    onClick={() => {
+                      if (is2FAEnabled) {
+                        setIs2FAEnabled(false);
+                      } else {
+                        setIs2FAModalOpen(true);
+                      }
+                    }}
                     className="px-4 py-2 bg-courier-warmbg hover:bg-courier-hairline text-courier-textprimary font-bold text-xs rounded-xl transition-all shrink-0 border border-courier-hairline"
                   >
-                    {is2FAEnabled ? "Nonaktifkan 2FA" : "Aktifkan 2FA"}
+                    {is2FAEnabled ? "Nonaktifkan 2FA" : "Aktifkan 2FA (Scan QR)"}
                   </button>
                 </div>
               </div>
@@ -880,6 +942,54 @@ export default function CourierSettings() {
           </div>
         </div>
       </div>
+
+      {/* Modal Konfirmasi Hapus Foto */}
+      {isDeleteConfirmOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-courier-surfacewhite w-full max-w-sm rounded-3xl border border-courier-hairline overflow-hidden p-8 text-center space-y-4 animate-fade-in shadow-xl">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg
+                className="w-8 h-8"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-courier-textprimary">
+                Hapus Foto Profil?
+              </h3>
+              <p className="text-sm text-courier-textsecondary mt-2">
+                Foto profil kamu akan dihapus dan diganti dengan avatar
+                default. Tindakan ini tidak dapat dibatalkan.
+              </p>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                className="flex-1 py-3 bg-courier-warmbg hover:bg-courier-hairline text-courier-textprimary rounded-xl text-sm font-bold transition-colors border border-courier-hairline"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmAvatarDelete}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-colors"
+              >
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Sukses Simpan */}
       {isSuccessModalOpen && (
@@ -918,6 +1028,18 @@ export default function CourierSettings() {
           </div>
         </div>
       )}
+
+      {/* 2FA Google Authenticator Modal */}
+      <TwoFactorModal
+        isOpen={is2FAModalOpen}
+        userEmail={email || "kurir@agrowaste.id"}
+        userName={fullName || "Mitra Logistik"}
+        onClose={() => setIs2FAModalOpen(false)}
+        onSuccess={() => {
+          setIs2FAEnabled(true);
+          setIsSuccessModalOpen(true);
+        }}
+      />
     </>
   );
-}
+} 
