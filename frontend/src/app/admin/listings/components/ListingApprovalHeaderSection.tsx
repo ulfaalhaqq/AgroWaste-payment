@@ -42,7 +42,7 @@ export const ListingApprovalHeaderSection = ({
         <StatCard
           title="Ditolak (Mingguan)"
           value={rejectedWeekly}
-          description="Rata-rata 5 per minggu"
+          description="Rata-rata per minggu"
           colorScheme="red"
         />
       </div>

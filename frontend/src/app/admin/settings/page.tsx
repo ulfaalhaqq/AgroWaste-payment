@@ -160,12 +160,12 @@ export default function SettingsPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Sidebar Settings Menu */}
-          <div className="flex flex-row overflow-x-auto lg:flex-col lg:col-span-1 gap-2 pb-2 lg:pb-0 w-full scrollbar-none shrink-0">
+          <div className="lg:col-span-1 rounded-2xl border border-admin-hairline bg-admin-surfacewhite overflow-hidden shrink-0 h-fit">
             <button
               onClick={() => setActiveTab("personal")}
-              className={`text-left px-4 py-3 rounded-xl text-sm transition-all whitespace-nowrap w-auto lg:w-full shrink-0 ${
+              className={`text-left px-5 py-4 text-sm transition-all w-full block ${
                 activeTab === "personal"
-                  ? "bg-admin-primary text-white font-bold shadow-md shadow-admin-primary/20"
+                  ? "bg-admin-primary text-white font-bold"
                   : "text-admin-textsecondary hover:bg-admin-warmbg hover:text-admin-textprimary font-semibold"
               }`}
             >
@@ -173,9 +173,9 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab("security")}
-              className={`text-left px-4 py-3 rounded-xl text-sm transition-all whitespace-nowrap w-auto lg:w-full shrink-0 ${
+              className={`text-left px-5 py-4 text-sm transition-all w-full block ${
                 activeTab === "security"
-                  ? "bg-admin-primary text-white font-bold shadow-md shadow-admin-primary/20"
+                  ? "bg-admin-primary text-white font-bold"
                   : "text-admin-textsecondary hover:bg-admin-warmbg hover:text-admin-textprimary font-semibold"
               }`}
             >
@@ -183,9 +183,9 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab("permissions")}
-              className={`text-left px-4 py-3 rounded-xl text-sm transition-all whitespace-nowrap w-auto lg:w-full shrink-0 ${
+              className={`text-left px-5 py-4 text-sm transition-all w-full block ${
                 activeTab === "permissions"
-                  ? "bg-admin-primary text-white font-bold shadow-md shadow-admin-primary/20"
+                  ? "bg-admin-primary text-white font-bold"
                   : "text-admin-textsecondary hover:bg-admin-warmbg hover:text-admin-textprimary font-semibold"
               }`}
             >

@@ -217,7 +217,7 @@ export default function AdminAnalytics() {
         </div>
         <button
           onClick={fetchAnalytics}
-          className="px-4 py-2 text-sm font-bold text-admin-primary bg-admin-surfacewhite border border-admin-hairline rounded-xl hover:bg-admin-warmbg flex items-center gap-2 transition-colors shadow-sm self-start"
+          className="px-4 py-2 text-sm font-bold text-white bg-admin-primary border border-admin-primary rounded-xl hover:brightness-125 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 flex items-center gap-2 transition-all duration-200 shadow-sm hover:shadow-xl self-start"
         >
           <svg
             className="w-4 h-4"
@@ -394,11 +394,11 @@ export default function AdminAnalytics() {
                         10,
                       );
                       const color =
-                        cat.category_name === "limbah_cair" || cat.category_name === "limbah-cair"
+                        cat.category_name === "Limbah Cair"
                           ? "bg-blue-500 hover:bg-blue-600"
-                          : cat.category_name === "limbah_olahan" || cat.category_name === "limbah-olahan"
-                          ? "bg-amber-500 hover:bg-amber-600"
-                          : "bg-admin-primary hover:bg-[#009A44]";
+                          : cat.category_name === "Limbah Olahan"
+                            ? "bg-amber-500 hover:bg-amber-600"
+                            : "bg-admin-primary hover:bg-[#009A44]";
 
                       return (
                         <div
@@ -442,9 +442,7 @@ export default function AdminAnalytics() {
           <div className="mt-6 flex flex-wrap gap-4 text-xs font-bold">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-admin-primary" />
-              <span className="text-admin-textsecondary">
-                Kotoran Padat
-              </span>
+              <span className="text-admin-textsecondary">Kotoran Padat</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-blue-500" />

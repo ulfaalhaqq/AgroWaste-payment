@@ -72,7 +72,7 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
   return (
     <aside
       className={`
-        w-64 h-screen fixed left-0 top-0 border-r border-admin-hairline bg-[#EBE7E0]
+        w-64 h-screen fixed left-0 top-0 border-r border-white/10 bg-zinc-900
         flex flex-col z-30 transition-transform duration-300 ease-in-out
         ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}
@@ -85,7 +85,7 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
           className="flex items-center gap-2"
           onClick={onClose}
         >
-          <span className="text-2xl font-bold text-admin-primary tracking-tight">
+          <span className="text-2xl font-bold text-white tracking-tight">
             AgroWaste
           </span>
         </Link>
@@ -94,7 +94,7 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
           type="button"
           aria-label="Tutup navigasi"
           onClick={onClose}
-          className="lg:hidden p-2 -mr-1 rounded-lg hover:bg-admin-hairline text-admin-textsecondary transition-colors"
+          className="lg:hidden p-2 -mr-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
         >
           <svg
             className="w-5 h-5"
@@ -128,12 +128,12 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
               aria-current={isActive ? "page" : undefined}
               className={`flex items-center px-4 py-3 rounded-xl transition-all duration-200 group ${
                 isActive
-                  ? "bg-admin-primary text-white shadow-md shadow-admin-primary/20"
-                  : "text-admin-textsecondary hover:bg-admin-warmbg hover:text-admin-textprimary"
+                  ? "bg-white text-zinc-900 shadow-md shadow-black/20"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               <svg
-                className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? "text-white" : "text-admin-textsecondary group-hover:text-admin-primary"}`}
+                className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? "text-zinc-900" : "text-white/70 group-hover:text-white"}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -153,7 +153,7 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
               </span>
               {item.badge && (
                 <span
-                  className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-white text-admin-primary" : "bg-admin-semamber text-white"}`}
+                  className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-zinc-900 text-white" : "bg-zinc-500 text-white"}`}
                 >
                   {item.badge}
                 </span>
@@ -164,10 +164,10 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
       </nav>
 
       {/* Logout */}
-      <div className="p-6 border-t border-admin-hairline/50">
+      <div className="p-6 border-t border-white/10">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 text-admin-semred hover:text-red-700 font-semibold text-sm transition-colors w-full px-2"
+          className="flex items-center gap-3 text-red-300 hover:text-white hover:bg-white/10 font-semibold text-sm transition-colors w-full px-2 py-2 rounded-lg"
         >
           <svg
             className="w-5 h-5"

@@ -93,6 +93,10 @@ function OrdersContent() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // ---- Pencarian & Pengurutan ----
+  const [search, setSearch] = useState("");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
   const fetchOrders = () => {
     setLoading(true);
     apiFetch("/orders")
@@ -110,9 +114,35 @@ function OrdersContent() {
 
   const visible = useMemo(() => {
     const statusFilter = TAB_MAP[activeTab];
-    if (!statusFilter) return orders;
-    return orders.filter((o) => o.status === statusFilter);
-  }, [orders, activeTab]);
+    let result = statusFilter
+      ? orders.filter((o) => o.status === statusFilter)
+      : orders;
+
+    // Filter pencarian: nomor pesanan atau nama produk
+    const q = search.trim().toLowerCase();
+    if (q) {
+      result = result.filter((o) => {
+        const orderNo = (
+          o.order_number ?? o.id.slice(0, 8)
+        ).toLowerCase();
+        const productName = (
+          o.items?.[0]?.product?.name ??
+          o.product?.name ??
+          ""
+        ).toLowerCase();
+        return orderNo.includes(q) || productName.includes(q);
+      });
+    }
+
+    // Urutkan berdasarkan tanggal pesanan
+    result = [...result].sort((a, b) => {
+      const diff =
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return sortOrder === "asc" ? diff : -diff;
+    });
+
+    return result;
+  }, [orders, activeTab, search, sortOrder]);
 
   const handleProcess = async (
     order: Order,
@@ -638,8 +668,8 @@ function OrdersContent() {
         )}
 
         <div className="bg-seller-surfacewhite border border-seller-hairline rounded-2xl overflow-hidden">
-          {/* Tab Bar */}
-          <div className="p-6 border-b border-seller-hairline flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Tab Bar + Toolbar Pencarian & Urutkan (satu baris) */}
+          <div className="p-6 border-b border-seller-hairline flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex flex-wrap bg-seller-warmbg p-1.5 rounded-xl gap-1 max-w-max">
               {Object.keys(TAB_MAP).map((tab) => (
                 <button
@@ -654,6 +684,64 @@ function OrdersContent() {
                   {tab}
                 </button>
               ))}
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+              <div className="relative w-full sm:w-64">
+                <svg
+                  className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-seller-textsecondary"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Cari nomor pesanan atau produk..."
+                  className="w-full pl-9 pr-4 py-2 border border-seller-hairline rounded-xl bg-[#F9F8F6] text-xs focus:outline-none focus:ring-1 focus:ring-seller-primary"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
+                }
+                className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-[#F4F1EA] border border-seller-hairline rounded-xl text-xs font-bold text-seller-textprimary transition-colors shrink-0"
+                title="Urutkan berdasarkan tanggal pesanan"
+              >
+                <svg
+                  className="w-3.5 h-3.5 text-seller-primary"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  {sortOrder === "asc" ? (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 4h13M3 8h9M3 12h5m6 8V4m0 16l-4-4m4 4l4-4"
+                    />
+                  ) : (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 4h5m-5 4h9m-9 4h13M16 4v16m0-16l-4 4m4-4l4 4"
+                    />
+                  )}
+                </svg>
+                {sortOrder === "asc" ? "Terlama" : "Terbaru"}
+              </button>
             </div>
           </div>
 
@@ -685,7 +773,9 @@ function OrdersContent() {
                       colSpan={4}
                       className="px-6 py-8 text-center text-seller-textsecondary text-xs"
                     >
-                      Tidak ada pesanan.
+                      {search
+                        ? "Tidak ada pesanan yang cocok dengan pencarian."
+                        : "Tidak ada pesanan."}
                     </td>
                   </tr>
                 )}

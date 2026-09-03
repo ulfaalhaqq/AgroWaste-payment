@@ -74,6 +74,7 @@ export const ListingApprovalDashboardSection = ({
   onReject,
 }: ListingApprovalDashboardSectionProps) => {
   const [activeFilter, setActiveFilter] = useState<string>("All Pending");
+  const [searchQuery, setSearchQuery] = useState("");
   const [categoriesList, setCategoriesList] = useState<string[]>([
     "All Pending",
     "Kotoran Padat",
@@ -109,20 +110,30 @@ export const ListingApprovalDashboardSection = ({
       .catch(() => {});
   }, []);
 
-  const filtered = useMemo(
-    () =>
+  const filtered = useMemo(() => {
+    let result =
       activeFilter === "All Pending"
         ? listings
-        : listings.filter((l) => l.category === activeFilter),
-    [listings, activeFilter],
-  );
+        : listings.filter((l) => l.category === activeFilter);
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter(
+        (l) =>
+          l.title.toLowerCase().includes(q) ||
+          l.seller.toLowerCase().includes(q),
+      );
+    }
+
+    return result;
+  }, [listings, activeFilter, searchQuery]);
 
   return (
     <div className="bg-admin-surfacewhite border border-admin-hairline rounded-2xl overflow-hidden shadow-sm">
       {/* Controls */}
-      <div className="p-4 border-b border-admin-hairline flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-4 border-b border-admin-hairline flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div
-          className="flex bg-admin-warmbg p-1 rounded-xl gap-1 max-w-full overflow-x-auto w-full sm:w-auto"
+          className="flex bg-admin-warmbg p-1 rounded-xl gap-1 max-w-full overflow-x-auto w-full lg:w-auto"
           role="tablist"
           aria-label="Category filter"
         >
@@ -142,6 +153,27 @@ export const ListingApprovalDashboardSection = ({
               {f}
             </button>
           ))}
+        </div>
+
+        <div className="relative w-full lg:w-72 shrink-0">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-admin-textsecondary">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari produk atau nama penjual..."
+            className="w-full pl-9 pr-4 py-2 bg-admin-warmbg border border-admin-hairline rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-admin-primary"
+          />
         </div>
       </div>
 
@@ -164,10 +196,14 @@ export const ListingApprovalDashboardSection = ({
               <tr>
                 <td colSpan={7} className="px-6 py-12 text-center">
                   <p className="font-bold text-admin-textprimary mb-1">
-                    Semua pengajuan selesai
+                    {searchQuery.trim()
+                      ? "Tidak ditemukan"
+                      : "Semua pengajuan selesai"}
                   </p>
                   <p className="text-xs text-admin-textsecondary">
-                    Tidak ada listing yang perlu ditinjau saat ini.
+                    {searchQuery.trim()
+                      ? "Tidak ada listing yang cocok dengan pencarian ini."
+                      : "Tidak ada listing yang perlu ditinjau saat ini."}
                   </p>
                 </td>
               </tr>

@@ -103,6 +103,7 @@ export default function AdminLogistics() {
   const [couriers, setCouriers] = useState<Courier[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("Semua");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedCourierId, setSelectedCourierId] = useState("");
@@ -212,13 +213,45 @@ export default function AdminLogistics() {
   const isMasalah = (o: Order) =>
     o.status === "dibatalkan" || o.status === "ditolak";
 
-  const filteredOrders = orders.filter((order) => {
-    if (activeTab === "Semua") return true;
-    if (activeTab === "Sedang Kirim") return isSedangKirim(order);
-    if (activeTab === "Terkirim") return isTerkirim(order);
-    if (activeTab === "Masalah") return isMasalah(order);
-    return true;
-  });
+  const filteredOrders = useMemo(() => {
+    let result = orders.filter((order) => {
+      if (activeTab === "Semua") return true;
+      if (activeTab === "Sedang Kirim") return isSedangKirim(order);
+      if (activeTab === "Terkirim") return isTerkirim(order);
+      if (activeTab === "Masalah") return isMasalah(order);
+      return true;
+    });
+
+    // Pencarian berdasarkan nomor order, nama peternak, atau nama pembeli
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((order) => {
+        const orderNumber = (
+          order.order_number ?? order.id.substring(0, 8)
+        ).toLowerCase();
+        const sellerName = (
+          order.peternak?.peternak_profile?.nama_peternakan ??
+          order.peternak?.name ??
+          ""
+        ).toLowerCase();
+        const buyerName = (order.user?.name ?? "").toLowerCase();
+
+        return (
+          orderNumber.includes(q) ||
+          sellerName.includes(q) ||
+          buyerName.includes(q)
+        );
+      });
+    }
+
+    // Urutkan ascending berdasarkan tanggal dibuat (paling lama duluan)
+    result = [...result].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+
+    return result;
+  }, [orders, activeTab, searchQuery]);
 
   const totalShipmentsCount = orders.length;
   const sedangKirimCount = orders.filter(isSedangKirim).length;
@@ -442,9 +475,9 @@ export default function AdminLogistics() {
 
         {/* Main Table Container */}
         <div className="bg-admin-surfacewhite border border-admin-hairline rounded-2xl overflow-hidden">
-          {/* Tab Filters */}
-          <div className="p-6 border-b border-admin-hairline flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex bg-admin-warmbg p-1.5 rounded-xl gap-1 max-w-full overflow-x-auto w-full sm:w-auto">
+          {/* Tab Filters + Search */}
+          <div className="p-6 border-b border-admin-hairline flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex bg-admin-warmbg p-1.5 rounded-xl gap-1 max-w-full overflow-x-auto w-full lg:w-auto">
               {tabs.map((tab) => (
                 <button
                   key={tab}
@@ -459,12 +492,31 @@ export default function AdminLogistics() {
                 </button>
               ))}
             </div>
-            <div className="text-sm font-medium text-admin-textsecondary font-tabular">
-              Menampilkan{" "}
-              <span className="font-bold text-admin-textprimary">
-                {filteredOrders.length}
-              </span>{" "}
-              dari {orders.length} pesanan
+
+            <div className="flex items-center gap-3 w-full lg:w-auto">
+              <div className="relative flex-1 lg:flex-none">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-admin-textsecondary">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari nomor order, peternak, atau pembeli..."
+                  className="w-full lg:w-72 pl-9 pr-4 py-2 bg-admin-warmbg border border-admin-hairline rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-admin-primary"
+                />
+              </div>
+              <span className="text-sm font-medium text-admin-textsecondary font-tabular whitespace-nowrap">
+                {filteredOrders.length} dari {orders.length}
+              </span>
             </div>
           </div>
 
@@ -476,7 +528,7 @@ export default function AdminLogistics() {
               </div>
             ) : filteredOrders.length === 0 ? (
               <div className="p-20 text-center text-admin-textsecondary text-sm font-semibold">
-                Tidak ada data logistik untuk filter ini.
+                Tidak ada data logistik untuk filter atau pencarian ini.
               </div>
             ) : (
               <table className="w-full text-left border-collapse">

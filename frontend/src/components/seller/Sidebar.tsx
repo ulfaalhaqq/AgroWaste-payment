@@ -66,7 +66,7 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   return (
     <aside
       className={`
-        w-64 h-screen fixed left-0 top-0 border-r border-seller-hairline bg-[#EBE7E0]
+        w-64 h-screen fixed left-0 top-0 border-r border-white/10 bg-seller-primary
         flex flex-col z-30 transition-transform duration-300 ease-in-out
         ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}
@@ -79,7 +79,7 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
           className="flex items-center gap-2"
           onClick={onClose}
         >
-          <span className="text-2xl font-bold text-seller-primary tracking-tight">
+          <span className="text-2xl font-bold text-white tracking-tight">
             AgroWaste
           </span>
         </Link>
@@ -88,7 +88,7 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
           type="button"
           aria-label="Tutup navigasi"
           onClick={onClose}
-          className="lg:hidden p-2 -mr-1 rounded-lg hover:bg-seller-hairline text-seller-textsecondary transition-colors"
+          className="lg:hidden p-2 -mr-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
         >
           <svg
             className="w-5 h-5"
@@ -108,7 +108,7 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 space-y-1">
+      <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {
           const isActive = pathname === item.path;
           return (
@@ -116,18 +116,20 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
               key={item.name}
               href={item.path}
               onClick={onClose}
+              aria-current={isActive ? "page" : undefined}
               className={`flex items-center px-4 py-3 rounded-xl transition-all duration-200 group ${
                 isActive
-                  ? "bg-seller-primary text-white shadow-md shadow-seller-primary/20"
-                  : "text-seller-textsecondary hover:bg-seller-warmbg hover:text-seller-textprimary"
+                  ? "bg-white text-seller-primary shadow-md shadow-black/10"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               <svg
-                className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? "text-white" : "text-seller-textsecondary group-hover:text-seller-primary"}`}
+                className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? "text-seller-primary" : "text-white/70 group-hover:text-white"}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
                 strokeWidth={isActive ? 2.5 : 2}
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -143,7 +145,7 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
 
               {item.badge !== undefined && (
                 <span
-                  className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-white text-seller-primary" : "bg-amber-500 text-white"}`}
+                  className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-seller-primary text-white" : "bg-amber-500 text-white"}`}
                 >
                   {item.badge}
                 </span>
@@ -154,10 +156,10 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       </nav>
 
       {/* Logout Button */}
-      <div className="p-6 border-t border-seller-hairline/50">
+      <div className="p-6 border-t border-white/10">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 text-seller-semred hover:text-red-700 font-semibold text-sm transition-colors w-full px-2"
+          className="flex items-center gap-3 text-red-200 hover:text-white hover:bg-white/10 font-semibold text-sm transition-colors w-full px-2 py-2 rounded-lg"
         >
           <svg
             className="w-5 h-5"
@@ -165,6 +167,7 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
             viewBox="0 0 24 24"
             stroke="currentColor"
             strokeWidth={2}
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
