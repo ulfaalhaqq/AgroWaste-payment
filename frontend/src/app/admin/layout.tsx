@@ -31,23 +31,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
-
-      {/* Status footer — fixed, clears sidebar on desktop */}
-      <footer className="fixed bottom-0 left-0 lg:left-64 right-0 h-10 bg-admin-surfacewhite border-t border-admin-hairline flex items-center justify-between px-6 z-20 select-none">
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-admin-textsecondary uppercase tracking-wider">
-          <span
-            className="w-1.5 h-1.5 rounded-full bg-admin-semgreen"
-            aria-hidden="true"
-          />
-          Sistem Online
-        </span>
-        <span className="text-[11px] font-semibold text-admin-textsecondary uppercase tracking-wider font-tabular">
-          Server JKT-01
-        </span>
-        <span className="text-[11px] font-semibold text-admin-textsecondary uppercase tracking-wider font-tabular">
-          Diperbarui 2m lalu
-        </span>
-      </footer>
     </div>
   );
 }

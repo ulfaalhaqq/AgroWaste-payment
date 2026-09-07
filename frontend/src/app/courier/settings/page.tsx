@@ -459,7 +459,7 @@ export default function CourierSettings() {
       <div className="space-y-8 pb-20">
         {/* Header */}
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-courier-primary mb-2">
+          <h2 className="text-3xl font-bold tracking-tight text-courier-primary mb-2">
             Pengaturan Profil
           </h2>
           <p className="text-sm text-courier-textsecondary">

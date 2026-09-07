@@ -6,15 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { logout } from "@/lib/auth";
 
-interface UserProfile {
-  id: string;
-  name: string;
-  avatar_url?: string;
-  logistik_profile?: {
-    company_name: string | null;
-  };
-}
-
 interface SidebarProps {
   mobileOpen?: boolean;
   onClose?: () => void;
@@ -24,26 +15,9 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [courierName, setCourierName] = useState("Kurir Logistik");
-  const [courierId, setCourierId] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    apiFetch("/profile")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json) => {
-        if (json?.success && json?.data) {
-          const user = json.data as UserProfile;
-          setCourierName(user.name);
-          setCourierId(user.id.slice(0, 8).toUpperCase());
-          if (user.avatar_url) {
-            setAvatarUrl(user.avatar_url);
-          }
-        }
-      })
-      .catch(() => {});
-
     apiFetch("/logistik/shipments")
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
@@ -89,52 +63,32 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
     },
   ];
 
-  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(courierName)}&background=2F5A28&color=fff&rounded=true`;
-
   return (
     <aside
       className={`
-        w-64 h-screen fixed left-0 top-0 border-r border-courier-hairline bg-courier-warmbg
+        w-64 h-screen fixed left-0 top-0 border-r border-white/10 bg-courier-primary
         flex flex-col z-30 transition-transform duration-300 ease-in-out
         ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}
       aria-label="Navigasi kurir"
     >
       {/* Brand Header */}
-      <div className="h-24 flex items-center justify-between px-6 pt-4 gap-3 mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-courier-primary text-white flex items-center justify-center shadow-md shadow-courier-primary/30">
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M13 16h4l4 4V10h-8z"
-              />
-            </svg>
-          </div>
-          <div>
-            <h1 className="font-bold text-lg text-courier-primary leading-tight">
-              Mitra
-              <br />
-              Logistik
-            </h1>
-            <p className="text-[10px] text-courier-textsecondary mt-0.5 tracking-wider">
-              Courier Portal
-            </p>
-          </div>
-        </div>
+      <div className="h-20 flex items-center justify-between px-6 pt-4 mb-4">
+        <Link
+          href="/courier"
+          className="flex items-center gap-2"
+          onClick={onClose}
+        >
+          <span className="text-2xl font-bold text-white tracking-tight">
+            AgroWaste
+          </span>
+        </Link>
         {/* Mobile close button */}
         <button
           type="button"
           aria-label="Tutup navigasi"
           onClick={onClose}
-          className="lg:hidden p-2 -mr-1 rounded-lg hover:bg-courier-primary/10 text-courier-textsecondary transition-colors"
+          className="lg:hidden p-2 -mr-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
         >
           <svg
             className="w-5 h-5"
@@ -167,12 +121,12 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
               onClick={onClose}
               className={`flex items-center px-4 py-3 rounded-lg transition-all duration-200 group ${
                 isActive
-                  ? "bg-courier-primary text-white shadow-md shadow-courier-primary/20"
-                  : "text-courier-textsecondary hover:bg-courier-primary/5 hover:text-courier-textprimary"
+                  ? "bg-white text-courier-primary shadow-md shadow-black/10"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               <svg
-                className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? "text-white" : "text-courier-textsecondary group-hover:text-courier-primary"}`}
+                className={`w-5 h-5 mr-3 flex-shrink-0 ${isActive ? "text-courier-primary" : "text-white/70 group-hover:text-white"}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -192,7 +146,7 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
 
               {item.badge !== undefined && (
                 <span
-                  className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-white text-courier-primary" : "bg-amber-500 text-white"}`}
+                  className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-courier-primary text-white" : "bg-amber-500 text-white"}`}
                 >
                   {item.badge}
                 </span>
@@ -202,32 +156,14 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
         })}
       </nav>
 
-      {/* Profile & Logout Button */}
-      <div className="p-4 border-t border-courier-hairline bg-courier-warmbg">
-        <div className="flex items-center gap-3 mb-4 px-2">
-          <img
-            src={avatarUrl || fallbackAvatar}
-            alt={courierName}
-            className="w-10 h-10 rounded-full border border-courier-hairline object-cover"
-          />
-          <div className="min-w-0 flex-1">
-            <h4
-              className="text-sm font-bold text-courier-textprimary truncate"
-              title={courierName}
-            >
-              {courierName}
-            </h4>
-            <span className="text-[10px] text-courier-textsecondary block truncate">
-              ID: {courierId || "..."}
-            </span>
-          </div>
-        </div>
+      {/* Logout Button */}
+      <div className="p-6 border-t border-white/10">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 text-courier-semred hover:text-red-700 font-semibold text-sm transition-colors w-full px-2 mt-2"
+          className="flex items-center gap-3 text-white hover:text-red-100 hover:bg-white/10 font-bold text-sm transition-colors w-full px-2 py-2 rounded-lg"
         >
           <svg
-            className="w-5 h-5"
+            className="w-5 h-5 text-red-200"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

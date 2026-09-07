@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { apiFetch, getProductImageUrl } from "@/lib/api";
-import { getUser, type AuthUser } from "@/lib/auth";
+import { getUser, logout, type AuthUser } from "@/lib/auth";
 
 export function Header() {
   const pathname = usePathname();
@@ -21,6 +21,12 @@ export function Header() {
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then((j) => setCartCount((j.data as unknown[]).length))
       .catch(() => setCartCount(0));
+  };
+
+  const handleLogout = () => {
+    logout();
+    window.dispatchEvent(new Event("auth-change"));
+    window.location.href = "/";
   };
 
   // close mobile menu when path changes
@@ -169,25 +175,80 @@ export function Header() {
               </Link>
             </div>
           ) : (
-            <Link
-              href="/profile"
-              className="flex items-center gap-2 pl-4 border-l border-neutral-200 cursor-pointer group"
-              title="Profil Pengguna"
-            >
-              <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-land-cream/30 flex items-center justify-center bg-[#009A44]/10 text-[#009A44] font-bold text-sm">
-                {user?.avatar_url ? (
-                  <img
-                    src={getProductImageUrl(user.avatar_url)}
-                    alt="Pengguna"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span>
-                    {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
-                  </span>
-                )}
+            <div className="relative pl-4 border-l border-neutral-200 group">
+              <Link
+                href="/profile"
+                className="flex items-center gap-2 cursor-pointer"
+                title="Profil Pengguna"
+              >
+                <div className="w-9 h-9 rounded-full overflow-hidden ring-1 ring-land-cream/30 flex items-center justify-center bg-[#009A44]/10 text-[#009A44] font-bold text-sm">
+                  {user?.avatar_url ? (
+                    <img
+                      src={getProductImageUrl(user.avatar_url)}
+                      alt="Pengguna"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span>
+                      {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
+                    </span>
+                  )}
+                </div>
+              </Link>
+
+              {/* Dropdown muncul saat kursor diarahkan ke avatar */}
+              <div className="absolute right-0 top-full pt-2 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50">
+                <div className="w-52 bg-white border border-neutral-100 rounded-xl shadow-xl p-1.5">
+                  <div className="px-3 py-2 border-b border-neutral-100 mb-1">
+                    <p className="text-xs font-bold text-land-dark truncate">
+                      {user?.name || "Pengguna"}
+                    </p>
+                    <p className="text-[11px] text-land-dark/50 truncate">
+                      {user?.email || ""}
+                    </p>
+                  </div>
+                  <Link
+                    href="/profile"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-land-dark/70 hover:bg-neutral-50 rounded-lg transition-colors"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
+                    </svg>
+                    Profil Saya
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                      />
+                    </svg>
+                    Keluar
+                  </button>
+                </div>
               </div>
-            </Link>
+            </div>
           )}
 
           {/* Hamburger Menu (Mobile) */}
@@ -243,6 +304,16 @@ export function Header() {
               {label}
             </Link>
           ))}
+
+          {mounted && isLoggedIn && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-2 py-2 text-red-600 font-bold"
+            >
+              Keluar
+            </button>
+          )}
         </nav>
       )}
     </header>
