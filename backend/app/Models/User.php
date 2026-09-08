@@ -45,7 +45,6 @@ class User extends Authenticatable
         return $this->hasOne(LogistikProfile::class);
     }
 
-    // Tambahkan ini
     public function sendPasswordResetNotification($token)
     {
         $url = env('FRONTEND_URL') . '/reset-password?token=' . $token . '&email=' . urlencode($this->email);
@@ -55,5 +54,15 @@ class User extends Authenticatable
         });
 
         $this->notify(new ResetPassword($token));
+    }
+
+    public function wallet()
+    {
+        return $this->hasOne(Wallet::class);
+    }
+
+    public function withdrawals()
+    {
+        return $this->hasMany(Withdrawal::class);
     }
 }

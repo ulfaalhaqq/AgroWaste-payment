@@ -11,6 +11,8 @@ use Illuminate\Support\Str;
 
 class OrderService
 {
+    public function __construct(protected PaymentService $paymentService) {}
+
     public function createOrder(array $data, User $user): Order
     {
         $pembeli = $user->buyerProfile;
@@ -69,7 +71,15 @@ class OrderService
 
             $orderNumber = 'AGW-' . date('Y') . '-' . strtoupper(\Illuminate\Support\Str::random(5));
             $totalQuantity = 0;
-            $totalPrice = 0;
+            $subtotalProduk = 0;
+
+            // Ongkir hanya digabung ke pembayaran digital kalau memakai
+            // kurir logistik DAN metode bayarnya Midtrans (QRIS). Untuk
+            // manual/COD, ongkir tetap dibayar tunai langsung ke kurir
+            // di luar sistem, seperti alur sebelumnya.
+            $ongkir = ($data['metode_pengiriman'] === 'logistik' && $data['metode_pembayaran'] === 'midtrans')
+                ? (float) ($data['ongkir'] ?? 0)
+                : 0;
 
             // 2. Buat data Order utama
             $order = \App\Models\Order::create([
@@ -81,7 +91,9 @@ class OrderService
                 'metode_pengiriman' => $data['metode_pengiriman'],
                 'metode_pembayaran' => $data['metode_pembayaran'],
                 'alamat_pengiriman' => $data['alamat_pengiriman'] ?? null,
-                'total_price'       => 0, 
+                'total_price'       => 0,
+                'subtotal_produk'   => 0,
+                'ongkir'            => $ongkir,
                 'quantity_kg'       => 0, 
             ]);
 
@@ -90,7 +102,7 @@ class OrderService
                 $price = (float) $item->product->price;
                 $subtotal = $price * $item->quantity_kg;
                 
-                $totalPrice += $subtotal;
+                $subtotalProduk += $subtotal;
                 $totalQuantity += $item->quantity_kg;
 
                 // Cek stok aman sebelum memotong
@@ -110,10 +122,13 @@ class OrderService
                 $item->product->decrement('stock_kg', $item->quantity_kg);
             }
 
-            // Update total harga & total berat di tabel order
+            // Update total harga & total berat di tabel order.
+            // total_price = subtotal_produk + ongkir, karena keduanya
+            // dibayar sekaligus dalam satu transaksi QRIS.
             $order->update([
-                'total_price' => $totalPrice,
-                'quantity_kg' => $totalQuantity
+                'subtotal_produk' => $subtotalProduk,
+                'total_price'     => $subtotalProduk + $ongkir,
+                'quantity_kg'     => $totalQuantity,
             ]);
 
             // 4. Kosongkan keranjang setelah sukses
@@ -177,6 +192,14 @@ class OrderService
     {
         $order = \App\Models\Order::findOrFail($orderId);
         $order->update(['status' => 'selesai']);
+
+        // Kreditkan ongkir penuh ke wallet kurir HANYA kalau order ini
+        // dibayar via Midtrans. Untuk manual/COD, ongkir sudah dibayar
+        // tunai langsung ke kurir di luar sistem, jadi tidak perlu (dan
+        // tidak boleh) dikreditkan lagi secara digital di sini.
+        if ($order->metode_pembayaran === 'midtrans') {
+            $this->paymentService->creditCourierWallet($order);
+        }
 
         app(\App\Services\NotificationService::class)->send(
             $order->peternak_id, 

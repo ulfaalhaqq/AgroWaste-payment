@@ -5,7 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ProductController;
 
 Route::prefix('v1')->group(function () {
-    
+
     // Auth Routes (Public)
     Route::prefix('auth')->group(function () {
         Route::post('/register', [AuthController::class, 'register']);
@@ -30,14 +30,14 @@ Route::prefix('v1')->group(function () {
             'data' => ['phone' => $phone]
         ]);
     });
-   
+
     // Edukasi Artikel (Public)
     Route::get('/articles', [\App\Http\Controllers\Api\ArticleController::class, 'index']);
     Route::get('/articles/{slug}', [\App\Http\Controllers\Api\ArticleController::class, 'show']);
 
-   // Protected Routes (Wajib bawa Token)
+    // Protected Routes (Wajib bawa Token)
     Route::middleware('auth:sanctum')->group(function () {
-        
+
         // Review Routes (Protected)
         Route::post('/reviews', [\App\Http\Controllers\Api\ReviewController::class, 'store']);
         Route::get('/products/{id}/can-review', [\App\Http\Controllers\Api\ReviewController::class, 'canReview']);
@@ -93,6 +93,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/couriers', [\App\Http\Controllers\Api\AdminController::class, 'createCourier']);
             Route::post('/shipments/assign', [\App\Http\Controllers\Api\AdminController::class, 'assignCourier']);
             Route::get('/analytics', [\App\Http\Controllers\Api\AdminController::class, 'getAnalytics']);
+            Route::get('/withdrawals', [\App\Http\Controllers\Api\WalletController::class, 'adminIndex']);
+            Route::put('/withdrawals/{id}/process', [\App\Http\Controllers\Api\WalletController::class, 'adminProcess']);
         });
 
         // Notification Routes
@@ -107,7 +109,7 @@ Route::prefix('v1')->group(function () {
             Route::put('/', [\App\Http\Controllers\Api\ProfileController::class, 'update']);
             Route::post('/avatar', [\App\Http\Controllers\Api\ProfileController::class, 'uploadAvatar']);
             Route::delete('/avatar', [\App\Http\Controllers\Api\ProfileController::class, 'deleteAvatar']);
-            Route::put('/password', [\App\Http\Controllers\Api\ProfileController::class, 'changePassword']); 
+            Route::put('/password', [\App\Http\Controllers\Api\ProfileController::class, 'changePassword']);
         });
 
         // Logistik Routes (Hanya Mitra Logistik)
@@ -121,7 +123,12 @@ Route::prefix('v1')->group(function () {
             Route::get('/dashboard', [\App\Http\Controllers\Api\SellerController::class, 'dashboard']);
             Route::get('/products', [\App\Http\Controllers\Api\SellerController::class, 'myProducts']);
         });
-        
+
+        // Wallet Routes (untuk Peternak & Kurir)
+        Route::prefix('wallet')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\WalletController::class, 'show']);
+            Route::post('/withdraw', [\App\Http\Controllers\Api\WalletController::class, 'requestWithdrawal']);
+        });
     });
 
     // Green Dashboard Route (Public)
@@ -129,5 +136,5 @@ Route::prefix('v1')->group(function () {
 
     // Webhook Midtrans Route (Public)
     Route::post('/webhooks/midtrans', [\App\Http\Controllers\Api\PaymentController::class, 'midtransWebhook']);
-    
+
 });

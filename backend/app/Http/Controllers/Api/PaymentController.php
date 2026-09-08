@@ -60,7 +60,7 @@ class PaymentController extends Controller
     public function midtransWebhook(Request $request): JsonResponse
     {
         $serverKey = env('MIDTRANS_SERVER_KEY');
-        
+
         // Validasi keamanan dari Midtrans
         $hashed = hash("sha512", $request->order_id . $request->status_code . $request->gross_amount . $serverKey);
         if ($hashed !== $request->signature_key) {
@@ -73,13 +73,21 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        // Jika pembayaran sukses, ubah status order dan payment
+        // Jika pembayaran sukses, ubah status order, payment, dan bagikan saldo ke peternak
         if ($request->transaction_status == 'settlement' || $request->transaction_status == 'capture') {
-            $order->update(['status' => 'dikonfirmasi']); 
-            
-            $payment = $order->payment;
-            if ($payment) {
-                $payment->update(['status' => 'sukses']);
+
+            // Hindari proses dobel kalau webhook Midtrans terkirim lebih dari sekali
+            // untuk order yang statusnya sudah bukan "menunggu_pembayaran"
+            if ($order->status === 'menunggu_pembayaran') {
+
+                $order->update(['status' => 'dikonfirmasi']);
+
+                $payment = $order->payment;
+                if ($payment) {
+                    $payment->update(['status' => 'sukses']);
+                }
+
+                $this->paymentService->creditSellerWallet($order);
             }
         }
 
