@@ -15,11 +15,27 @@ import {
   Package,
   Leaf,
   Navigation,
-  Locate,
+  QrCode,
 } from "lucide-react";
 import { apiFetch, getProductImageUrl } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { calculateDeliveryCost, calculateDistanceKm } from "@/lib/location";
+
+declare global {
+  interface Window {
+    snap?: {
+      pay: (
+        token: string,
+        options: {
+          onSuccess?: (result: unknown) => void;
+          onPending?: (result: unknown) => void;
+          onError?: (result: unknown) => void;
+          onClose?: () => void;
+        }
+      ) => void;
+    };
+  }
+}
 
 interface CartProduct {
   id: string;
@@ -46,6 +62,7 @@ interface CartItem {
 }
 
 interface CheckoutOrder {
+  id: string;
   order_number: string;
   total_price: string | number;
   status: string;
@@ -72,9 +89,9 @@ export default function CheckoutContent() {
   const [metodePengiriman, setMetodePengiriman] = useState<
     "pickup" | "logistik"
   >("pickup");
-  const [metodePembayaran, setMetodePembayaran] = useState<"manual" | "cod">(
-    "manual",
-  );
+  const [metodePembayaran, setMetodePembayaran] = useState<
+    "manual" | "cod" | "midtrans"
+  >("midtrans");
   const [alamatPengiriman, setAlamatPengiriman] = useState("");
   const [gisLat, setGisLat] = useState<string | number>("-7.892400");
   const [gisLng, setGisLng] = useState<string | number>("112.656300");
@@ -232,6 +249,40 @@ export default function CheckoutContent() {
   );
   const estimatedShippingCost = shippingCalculation.deliveryCostRaw || EST_SHIPPING;
 
+  // Ongkir hanya digabung ke total tagihan kalau pengiriman logistik
+  // DAN metode bayarnya QRIS/Midtrans — sesuai aturan backend.
+  // Untuk manual/COD, ongkir tetap ditampilkan terpisah (dibayar tunai
+  // langsung ke kurir), tidak menambah Total Tagihan di sini.
+  const ongkirDigabungKeTotal =
+    metodePengiriman === "logistik" && metodePembayaran === "midtrans";
+  const totalTagihan = ongkirDigabungKeTotal
+    ? subtotal + estimatedShippingCost
+    : subtotal;
+
+  const loadMidtransScript = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (window.snap) {
+        resolve();
+        return;
+      }
+      const existing = document.getElementById("midtrans-snap-script");
+      if (existing) {
+        existing.addEventListener("load", () => resolve());
+        return;
+      }
+      const script = document.createElement("script");
+      script.id = "midtrans-snap-script";
+      script.src = "https://app.sandbox.midtrans.com/snap/snap.js";
+      script.setAttribute(
+        "data-client-key",
+        process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY || "",
+      );
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Gagal memuat Midtrans Snap."));
+      document.body.appendChild(script);
+    });
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
@@ -257,13 +308,21 @@ export default function CheckoutContent() {
             : alamatPengiriman.trim()
           : null;
 
+      const checkoutBody: Record<string, unknown> = {
+        metode_pengiriman: metodePengiriman,
+        metode_pembayaran: metodePembayaran,
+        alamat_pengiriman: finalAlamat,
+      };
+
+      // Ongkir cuma dikirim kalau memang akan digabung ke pembayaran
+      // Midtrans. Untuk manual/COD, backend tidak mengharuskan field ini.
+      if (ongkirDigabungKeTotal) {
+        checkoutBody.ongkir = estimatedShippingCost;
+      }
+
       const res = await apiFetch("/orders/checkout", {
         method: "POST",
-        body: JSON.stringify({
-          metode_pengiriman: metodePengiriman,
-          metode_pembayaran: metodePembayaran,
-          alamat_pengiriman: finalAlamat,
-        }),
+        body: JSON.stringify(checkoutBody),
       });
       const json = await res.json();
 
@@ -272,13 +331,63 @@ export default function CheckoutContent() {
         return;
       }
 
-      // If manual payment, upload proof
-      if (metodePembayaran === "manual" && proofImage) {
-        const orderData = json.data as { id: string };
-        const orderId = orderData.id;
+      const orderData = json.data as CheckoutOrder;
 
+      // ── Alur Midtrans / QRIS ──────────────────────────────────────
+      if (metodePembayaran === "midtrans") {
+        await loadMidtransScript();
+
+        const tokenRes = await apiFetch("/payments/midtrans/token", {
+          method: "POST",
+          body: JSON.stringify({ order_id: orderData.id }),
+        });
+        const tokenJson = await tokenRes.json();
+
+        if (!tokenRes.ok || !tokenJson.success) {
+          setSubmitError(
+            tokenJson.message ?? "Gagal membuat sesi pembayaran QRIS.",
+          );
+          setSubmitting(false);
+          return;
+        }
+
+        const snapToken = tokenJson.data.snap_token as string;
+
+        window.snap?.pay(snapToken, {
+          onSuccess: () => {
+            setSuccessOrder(orderData);
+            window.dispatchEvent(new Event("cart-change"));
+          },
+          onPending: () => {
+            // Pembeli sudah dapat kode QRIS tapi belum menyelesaikan
+            // pembayaran — tetap arahkan ke ringkasan, status order
+            // masih "menunggu_pembayaran" sampai webhook masuk.
+            setSuccessOrder(orderData);
+            window.dispatchEvent(new Event("cart-change"));
+          },
+          onError: () => {
+            setSubmitError(
+              "Pembayaran gagal diproses. Silakan coba lagi.",
+            );
+            setSubmitting(false);
+          },
+          onClose: () => {
+            // Popup ditutup tanpa menyelesaikan pembayaran. Order tetap
+            // ada dengan status "menunggu_pembayaran" dan bisa dibayar
+            // lagi nanti dari halaman riwayat pesanan.
+            setSubmitError(
+              "Pembayaran dibatalkan. Pesanan tersimpan sebagai menunggu pembayaran.",
+            );
+            setSubmitting(false);
+          },
+        });
+        return;
+      }
+
+      // ── Alur Transfer Manual ──────────────────────────────────────
+      if (metodePembayaran === "manual" && proofImage) {
         const formData = new FormData();
-        formData.append("order_id", orderId);
+        formData.append("order_id", orderData.id);
         formData.append("proof_image", proofImage);
 
         const token = getToken();
@@ -288,7 +397,6 @@ export default function CheckoutContent() {
             method: "POST",
             headers: {
               Authorization: `Bearer ${token}`,
-              // Don't set Content-Type for FormData, browser sets it with boundary
             },
             body: formData,
           },
@@ -300,16 +408,17 @@ export default function CheckoutContent() {
             proofJson.message ??
               "Pesanan dibuat, tetapi gagal mengunggah bukti pembayaran.",
           );
-          // We could return here, but order is already created. For MVP, just show error or proceed anyway.
         }
       }
 
-      setSuccessOrder(json.data as CheckoutOrder);
+      setSuccessOrder(orderData);
       window.dispatchEvent(new Event("cart-change"));
     } catch {
       setSubmitError("Tidak dapat terhubung ke server. Coba lagi.");
     } finally {
-      setSubmitting(false);
+      if (metodePembayaran !== "midtrans") {
+        setSubmitting(false);
+      }
     }
   };
 
@@ -355,7 +464,9 @@ export default function CheckoutContent() {
               <span className="font-bold text-land-ink">
                 {successOrder.metode_pembayaran === "cod"
                   ? "COD (Bayar di Tempat)"
-                  : "Transfer Manual"}
+                  : successOrder.metode_pembayaran === "midtrans"
+                    ? "QRIS (Midtrans)"
+                    : "Transfer Manual"}
               </span>
             </div>
           </div>
@@ -622,6 +733,49 @@ export default function CheckoutContent() {
               </div>
 
               <div className="space-y-4">
+                {/* QRIS / Midtrans — ditaruh paling atas sebagai opsi utama */}
+                <button
+                  type="button"
+                  onClick={() => setMetodePembayaran("midtrans")}
+                  className={`w-full relative rounded-2xl p-5 cursor-pointer text-left transition-all duration-200 shadow-sm border-2 ${
+                    metodePembayaran === "midtrans"
+                      ? "bg-[#E6F5EC]/50 border-[#009A44]"
+                      : "bg-white border-[#E8E0D5]/60 hover:border-land-clay"
+                  }`}
+                >
+                  {metodePembayaran === "midtrans" && (
+                    <div className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-[#009A44] rounded-full text-white flex items-center justify-center shadow-sm">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  <div className="flex gap-4">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        metodePembayaran === "midtrans"
+                          ? "bg-[#009A44] text-white"
+                          : "bg-[#F0EDE6] text-land-muted"
+                      }`}
+                    >
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-sm text-land-ink">
+                          QRIS
+                        </h3>
+                        <span className="px-2 py-0.5 bg-[#009A44]/10 text-[#009A44] text-[9px] font-bold tracking-wider uppercase rounded-full">
+                          Instan &amp; Otomatis
+                        </span>
+                      </div>
+                      <p className="text-xs text-land-muted mt-1">
+                        Scan QRIS pakai e-wallet atau m-banking apa saja
+                        (GoPay, DANA, OVO, ShopeePay, dll). Pesanan langsung
+                        diproses begitu pembayaran berhasil.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
                 {/* Transfer Manual */}
                 <button
                   type="button"
@@ -640,9 +794,7 @@ export default function CheckoutContent() {
                   <div className="flex gap-4">
                     <div className="w-5 h-5 rounded-full border-4 border-[#009A44] flex-shrink-0 bg-white mt-0.5" />
                     <div className="flex-1">
-                      <h3
-                        className={`font-bold text-sm ${metodePembayaran === "manual" ? "text-land-ink" : "text-land-ink"}`}
-                      >
+                      <h3 className="font-bold text-sm text-land-ink">
                         Transfer Manual
                       </h3>
                       <p className="text-xs text-land-muted mt-1">
@@ -714,9 +866,7 @@ export default function CheckoutContent() {
                       className={`w-5 h-5 rounded-full border-4 flex-shrink-0 mt-0.5 ${metodePembayaran === "cod" ? "border-[#009A44] bg-white" : "border-[#E8E0D5] bg-transparent"}`}
                     />
                     <div className="flex-1">
-                      <h3
-                        className={`font-bold text-sm ${metodePembayaran === "cod" ? "text-land-ink" : "text-land-ink"}`}
-                      >
+                      <h3 className="font-bold text-sm text-land-ink">
                         COD (Bayar di Tempat)
                       </h3>
                       <p className="text-xs text-land-muted mt-1">
@@ -726,9 +876,6 @@ export default function CheckoutContent() {
                   </div>
                 </button>
               </div>
-              <p className="text-[10px] text-land-muted mt-3">
-                Metode pembayaran lain (QRIS, VA) segera hadir.
-              </p>
             </div>
 
             {/* Error Banner */}
@@ -793,7 +940,9 @@ export default function CheckoutContent() {
                   <div className="flex justify-between text-xs">
                     <span className="text-land-muted">
                       Ongkir{" "}
-                      <em className="not-italic opacity-70">(estimasi)</em>
+                      <em className="not-italic opacity-70">
+                        {ongkirDigabungKeTotal ? "(via QRIS)" : "(estimasi)"}
+                      </em>
                     </span>
                     <span className="font-bold text-land-muted font-tabular">
                       {formatRupiah(estimatedShippingCost)}
@@ -805,10 +954,11 @@ export default function CheckoutContent() {
               <div className="flex justify-between items-center border-t border-[#E8E0D5]/60 pt-6 mb-1">
                 <span className="font-bold text-land-ink">Total Tagihan</span>
                 <span className="text-2xl font-bold text-[#009A44] font-tabular">
-                  {formatRupiah(subtotal)}
+                  {formatRupiah(totalTagihan)}
                 </span>
               </div>
-              {metodePengiriman === "logistik" ? (
+
+              {metodePengiriman === "logistik" && !ongkirDigabungKeTotal && (
                 <div className="bg-red-50/80 border border-red-200 rounded-2xl p-4 my-4 shadow-sm space-y-2.5">
                   <div className="flex items-center justify-between border-b border-red-200/60 pb-2">
                     <div className="flex items-center gap-2 text-red-700">
@@ -837,9 +987,21 @@ export default function CheckoutContent() {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="mb-6" />
               )}
+
+              {metodePengiriman === "logistik" && ongkirDigabungKeTotal && (
+                <div className="bg-[#E6F5EC]/60 border border-[#009A44]/20 rounded-2xl p-4 my-4 shadow-sm">
+                  <div className="flex items-start gap-2 text-xs text-[#00662D]">
+                    <QrCode className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      Harga produk dan ongkir dibayar sekaligus lewat satu
+                      QRIS. Tidak ada biaya tambahan saat barang diterima.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {!(metodePengiriman === "logistik") && <div className="mb-6" />}
 
               {/* CTA */}
               <button
@@ -870,7 +1032,9 @@ export default function CheckoutContent() {
                   </svg>
                 ) : (
                   <>
-                    Konfirmasi Pesanan
+                    {metodePembayaran === "midtrans"
+                      ? "Bayar dengan QRIS"
+                      : "Konfirmasi Pesanan"}
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}
