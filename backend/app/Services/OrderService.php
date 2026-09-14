@@ -73,11 +73,11 @@ class OrderService
             $totalQuantity = 0;
             $subtotalProduk = 0;
 
-            // Ongkir hanya digabung ke pembayaran digital kalau memakai
-            // kurir logistik DAN metode bayarnya Midtrans (QRIS). Untuk
-            // manual/COD, ongkir tetap dibayar tunai langsung ke kurir
-            // di luar sistem, seperti alur sebelumnya.
-            $ongkir = ($data['metode_pengiriman'] === 'logistik' && $data['metode_pembayaran'] === 'midtrans')
+            // Ongkir dihitung untuk SEMUA metode pembayaran, selama
+            // pengiriman pakai kurir logistik. Titik kredit wallet kurir-nya
+            // yang beda per metode (lihat completeOrder / confirmasi admin),
+            // tapi nominal ongkir tetap perlu tercatat di sini untuk semuanya.
+            $ongkir = $data['metode_pengiriman'] === 'logistik'
                 ? (float) ($data['ongkir'] ?? 0)
                 : 0;
 
@@ -151,11 +151,20 @@ class OrderService
     public function processOrderBySeller(string $orderId, string $status, ?string $reason = null)
     {
         $order = \App\Models\Order::findOrFail($orderId);
-        
+
         $order->update([
             'status' => $status, // 'dikonfirmasi' atau 'ditolak' atau 'dikirim'
             'rejection_reason' => $reason
         ]);
+
+        // Kredit wallet peternak (dipotong fee 5%) tepat saat peternak
+        // menerima pesanan yang sudah lunas dibayar via Midtrans.
+        // Untuk manual/COD, kredit wallet menunggu verifikasi admin
+        // terpisah (lihat confirmManualPayment / confirmCodSettlement),
+        // karena uangnya belum tentu benar-benar sampai ke platform.
+        if ($status === 'dikonfirmasi' && $order->metode_pembayaran === 'midtrans') {
+            $this->paymentService->creditSellerWallet($order);
+        }
 
         // Jika pengiriman logistik & status dikonfirmasi/dikirim, hubungkan otomatis ke kurir
         if (($status === 'dikonfirmasi' || $status === 'dikirim') && $order->metode_pengiriman === 'logistik') {

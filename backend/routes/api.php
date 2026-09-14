@@ -30,6 +30,9 @@ Route::prefix('v1')->group(function () {
             'data' => ['phone' => $phone]
         ]);
     });
+    
+    //rekening admin AgroWaste
+    Route::get('/config/admin-bank', [\App\Http\Controllers\Api\PublicConfigController::class, 'adminBankAccount']);
 
     // Edukasi Artikel (Public)
     Route::get('/articles', [\App\Http\Controllers\Api\ArticleController::class, 'index']);

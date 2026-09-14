@@ -73,21 +73,23 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        // Jika pembayaran sukses, ubah status order, payment, dan bagikan saldo ke peternak
+        // Jika pembayaran sukses, ubah status order & payment.
+        // PENTING: wallet peternak TIDAK dikreditkan di sini lagi.
+        // Kredit wallet baru terjadi saat peternak klik "Terima" pesanan
+        // (lihat OrderService::processOrderBySeller), supaya peternak
+        // punya kesempatan menolak pesanan sebelum dana benar-benar
+        // dianggap miliknya.
         if ($request->transaction_status == 'settlement' || $request->transaction_status == 'capture') {
 
             // Hindari proses dobel kalau webhook Midtrans terkirim lebih dari sekali
-            // untuk order yang statusnya sudah bukan "menunggu_pembayaran"
             if ($order->status === 'menunggu_pembayaran') {
 
-                $order->update(['status' => 'dikonfirmasi']);
+                $order->update(['status' => 'menunggu_konfirmasi']);
 
                 $payment = $order->payment;
                 if ($payment) {
                     $payment->update(['status' => 'sukses']);
                 }
-
-                $this->paymentService->creditSellerWallet($order);
             }
         }
 
