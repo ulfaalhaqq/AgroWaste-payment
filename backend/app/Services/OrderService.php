@@ -166,6 +166,18 @@ class OrderService
             $this->paymentService->creditSellerWallet($order);
         }
 
+        // Kalau peternak MENOLAK pesanan yang sudah lunas dibayar via
+        // Midtrans, kembalikan penuh uangnya ke wallet pembeli. Wallet
+        // peternak belum pernah dikreditkan di titik ini (baru dikreditkan
+        // saat "dikonfirmasi" di atas), jadi tidak perlu ada pembatalan
+        // kredit di sisi peternak.
+        if ($status === 'ditolak' && $order->metode_pembayaran === 'midtrans') {
+            $payment = $order->payment;
+            if ($payment && $payment->status === 'sukses') {
+                $this->paymentService->refundBuyerWallet($order);
+            }
+        }
+
         // Jika pengiriman logistik & status dikonfirmasi/dikirim, hubungkan otomatis ke kurir
         if (($status === 'dikonfirmasi' || $status === 'dikirim') && $order->metode_pengiriman === 'logistik') {
             $shipment = \App\Models\Shipment::where('order_id', $order->id)->first();

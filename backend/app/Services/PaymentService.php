@@ -128,6 +128,58 @@ class PaymentService
     }
 
     /**
+     * Refund penuh ke wallet pembeli saat pesanan ditolak peternak,
+     * untuk pesanan yang sudah lunas dibayar via Midtrans. Nominal yang
+     * dikembalikan adalah total_price penuh (subtotal produk + ongkir),
+     * karena pembeli sudah membayar semuanya sekaligus lewat QRIS.
+     *
+     * Wallet pembeli memakai model Wallet yang sama dengan peternak/kurir,
+     * hanya dibedakan dari user_id pemiliknya.
+     */
+    public function refundBuyerWallet(Order $order): void
+    {
+        DB::transaction(function () use ($order) {
+            $wallet = Wallet::firstOrCreate(
+                ['user_id' => $order->user_id],
+                ['id' => Str::uuid()->toString(), 'balance' => 0]
+            );
+
+            $wallet->increment('balance', (float) $order->total_price);
+        });
+    }
+
+    /**
+     * Admin memverifikasi bukti transfer manual yang diunggah pembeli.
+     * Setelah dikonfirmasi, status order berubah jadi "menunggu_konfirmasi"
+     * (peternak bisa mulai Terima/Tolak) — sama seperti alur setelah
+     * webhook Midtrans settlement. Tidak ada kredit wallet di sini;
+     * wallet peternak baru terisi saat peternak klik "Terima" pesanan,
+     * konsisten dengan alur QRIS.
+     *
+     * @throws \Exception jika order bukan metode manual atau belum ada bukti diunggah
+     */
+    public function confirmManualPayment(Order $order): void
+    {
+        if ($order->metode_pembayaran !== 'manual') {
+            throw new \Exception('Pesanan ini bukan metode transfer manual.');
+        }
+
+        $payment = $order->payment;
+        if (!$payment || !$payment->proof) {
+            throw new \Exception('Belum ada bukti transfer yang diunggah untuk pesanan ini.');
+        }
+
+        if ($order->status !== 'menunggu_konfirmasi' && $order->status !== 'pending') {
+            throw new \Exception('Pesanan ini sudah diproses sebelumnya.');
+        }
+
+        DB::transaction(function () use ($order, $payment) {
+            $payment->update(['status' => 'sukses']);
+            $order->update(['status' => 'menunggu_konfirmasi']);
+        });
+    }
+
+    /**
      * Dipanggil ketika pesanan selesai diantar (buyer konfirmasi terima).
      * Mengkreditkan ongkir penuh (tanpa potongan) ke wallet kurir yang
      * ditugaskan pada shipment order ini.
