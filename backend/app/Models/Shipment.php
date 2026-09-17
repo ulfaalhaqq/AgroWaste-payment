@@ -19,6 +19,15 @@ class Shipment extends Model
         'logistik_profile_id',
         'status',
         'tracking_notes',
+        'cod_deposit_status',
+        'cod_proof_path',
+        'cod_deadline',
+        'cod_warned_at',
+    ];
+
+    protected $casts = [
+        'cod_deadline' => 'datetime',
+        'cod_warned_at' => 'datetime',
     ];
 
     public function order(): BelongsTo

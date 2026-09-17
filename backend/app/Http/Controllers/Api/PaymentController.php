@@ -13,7 +13,9 @@ use Illuminate\Http\Request;
 
 class PaymentController extends Controller
 {
-    public function __construct(protected PaymentService $paymentService) {}
+    public function __construct(protected PaymentService $paymentService)
+    {
+    }
 
     /**
      * Endpoint untuk Pembeli mengunggah bukti transfer manual
@@ -28,7 +30,7 @@ class PaymentController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Bukti pembayaran berhasil diunggah. Menunggu konfirmasi peternak.',
-            'data'    => $payment
+            'data' => $payment
         ], 200);
     }
 
@@ -50,7 +52,7 @@ class PaymentController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Snap token berhasil didapatkan.',
-            'data'    => ['snap_token' => $token]
+            'data' => ['snap_token' => $token]
         ], 200);
     }
 
@@ -65,6 +67,22 @@ class PaymentController extends Controller
         $hashed = hash("sha512", $request->order_id . $request->status_code . $request->gross_amount . $serverKey);
         if ($hashed !== $request->signature_key) {
             return response()->json(['message' => 'Invalid signature'], 403);
+        }
+            
+        // Cek dulu apakah ini top up saldo (prefix TOPUP-), bukan pembayaran order
+        if (str_starts_with($request->order_id, 'TOPUP-')) {
+            if ($request->transaction_status == 'settlement' || $request->transaction_status == 'capture') {
+                $topup = \App\Models\WalletTopup::where('reference', $request->order_id)->first();
+                if ($topup && $topup->status === 'pending') {
+                    $topup->update(['status' => 'sukses']);
+                    $wallet = \App\Models\Wallet::firstOrCreate(
+                        ['user_id' => $topup->user_id],
+                        ['id' => \Illuminate\Support\Str::uuid()->toString(), 'balance' => 0]
+                    );
+                    $wallet->increment('balance', (float) $topup->amount);
+                }
+            }
+            return response()->json(['message' => 'Webhook top up berhasil diproses'], 200);
         }
 
         // Cari pesanan berdasarkan nomor order (AGW-YYYY-XXXXX)
@@ -95,4 +113,5 @@ class PaymentController extends Controller
 
         return response()->json(['message' => 'Webhook berhasil diproses'], 200);
     }
+
 }

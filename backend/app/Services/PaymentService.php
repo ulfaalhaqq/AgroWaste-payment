@@ -12,6 +12,8 @@ use App\Models\Wallet;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Models\User;
+use App\Models\WalletTopup;
 
 class PaymentService
 {
@@ -22,7 +24,13 @@ class PaymentService
     protected const PLATFORM_FEE_PERCENT = 5;
 
     /**
-     * Proses unggah bukti transfer manual
+     * Proses unggah bukti transfer manual.
+     *
+     * PENTING: method ini SENGAJA tidak mengubah status order. Order
+     * tetap "menunggu_pembayaran" sampai admin memverifikasi buktinya
+     * lewat confirmManualPayment(). Ini mencegah peternak bisa Terima/
+     * Tolak pesanan yang belum pasti dibayar (bukti bisa saja palsu/
+     * belum dicek siapapun).
      */
     public function uploadManualProof(array $validatedData, UploadedFile $file): Payment
     {
@@ -32,10 +40,10 @@ class PaymentService
         $payment = Payment::updateOrCreate(
             ['order_id' => $order->id],
             [
-                'id'             => Str::uuid()->toString(),
-                'amount'         => $order->total_price,
+                'id' => Str::uuid()->toString(),
+                'amount' => $order->total_price,
                 'payment_method' => 'manual',
-                'status'         => 'pending'
+                'status' => 'pending'
             ]
         );
 
@@ -43,13 +51,12 @@ class PaymentService
         $path = $file->store('payment_proofs', 'public');
 
         PaymentProof::create([
-            'id'         => Str::uuid()->toString(),
+            'id' => Str::uuid()->toString(),
             'payment_id' => $payment->id,
             'image_path' => $path,
         ]);
 
-        // Ubah status order
-        $order->update(['status' => 'menunggu_konfirmasi']);
+        // Status order TIDAK diubah di sini. Lihat catatan di docblock.
 
         return $payment;
     }
@@ -67,13 +74,13 @@ class PaymentService
 
         $params = [
             'transaction_details' => [
-                'order_id'     => $order->order_number,
+                'order_id' => $order->order_number,
                 'gross_amount' => (int) $order->total_price,
             ],
             // Midtrans butuh info customer dari relasi order->user
-            'customer_details'    => [
+            'customer_details' => [
                 'first_name' => $order->user->name,
-                'email'      => $order->user->email,
+                'email' => $order->user->email,
             ]
         ];
 
@@ -84,15 +91,51 @@ class PaymentService
         Payment::updateOrCreate(
             ['order_id' => $order->id],
             [
-                'id'             => Str::uuid()->toString(),
-                'amount'         => $order->total_price,
+                'id' => Str::uuid()->toString(),
+                'amount' => $order->total_price,
                 'payment_method' => 'midtrans',
-                'status'         => 'pending',
-                'snap_token'     => $snapToken,
+                'status' => 'pending',
+                'snap_token' => $snapToken,
             ]
         );
 
         return $snapToken;
+    }
+
+    /**
+     * Generate Snap Token untuk top up saldo wallet (bukan pembayaran order).
+     * Reference number pakai prefix "TOPUP-" supaya webhook bisa bedain ini
+     * dari pembayaran order biasa yang pakai prefix "AGW-".
+     */
+    public function getTopUpSnapToken(User $user, float $amount): string
+    {
+        \Midtrans\Config::$serverKey = env('MIDTRANS_SERVER_KEY');
+        \Midtrans\Config::$isProduction = false;
+        \Midtrans\Config::$isSanitized = true;
+        \Midtrans\Config::$is3ds = true;
+
+        $reference = 'TOPUP-' . strtoupper(Str::random(8));
+
+        WalletTopup::create([
+            'id' => Str::uuid()->toString(),
+            'user_id' => $user->id,
+            'reference' => $reference,
+            'amount' => $amount,
+            'status' => 'pending',
+        ]);
+
+        $params = [
+            'transaction_details' => [
+                'order_id' => $reference,
+                'gross_amount' => (int) $amount,
+            ],
+            'customer_details' => [
+                'first_name' => $user->name,
+                'email' => $user->email,
+            ],
+        ];
+
+        return \Midtrans\Snap::getSnapToken($params);
     }
 
     /**
@@ -118,20 +161,20 @@ class PaymentService
             $wallet->increment('balance', $saldoPenjual);
 
             PlatformRevenue::create([
-                'id'         => Str::uuid()->toString(),
-                'source'     => 'transaction_fee',
-                'order_id'   => $order->id,
-                'user_id'    => $order->peternak_id,
-                'amount'     => $feeAdmin,
+                'id' => Str::uuid()->toString(),
+                'source' => 'transaction_fee',
+                'order_id' => $order->id,
+                'user_id' => $order->peternak_id,
+                'amount' => $feeAdmin,
             ]);
         });
     }
 
     /**
      * Refund penuh ke wallet pembeli saat pesanan ditolak peternak,
-     * untuk pesanan yang sudah lunas dibayar via Midtrans. Nominal yang
-     * dikembalikan adalah total_price penuh (subtotal produk + ongkir),
-     * karena pembeli sudah membayar semuanya sekaligus lewat QRIS.
+     * untuk pesanan yang sudah lunas dibayar (Midtrans/Manual/Wallet).
+     * Nominal yang dikembalikan adalah total_price penuh (subtotal
+     * produk + ongkir), karena pembeli sudah membayar semuanya sekaligus.
      *
      * Wallet pembeli memakai model Wallet yang sama dengan peternak/kurir,
      * hanya dibedakan dari user_id pemiliknya.
@@ -150,13 +193,15 @@ class PaymentService
 
     /**
      * Admin memverifikasi bukti transfer manual yang diunggah pembeli.
-     * Setelah dikonfirmasi, status order berubah jadi "menunggu_konfirmasi"
-     * (peternak bisa mulai Terima/Tolak) — sama seperti alur setelah
-     * webhook Midtrans settlement. Tidak ada kredit wallet di sini;
-     * wallet peternak baru terisi saat peternak klik "Terima" pesanan,
-     * konsisten dengan alur QRIS.
+     * Ini SATU-SATUNYA titik yang boleh memindahkan order dari
+     * "menunggu_pembayaran" ke "menunggu_konfirmasi" untuk metode manual
+     * (peternak baru bisa mulai Terima/Tolak setelah ini) — sama seperti
+     * alur setelah webhook Midtrans settlement. Tidak ada kredit wallet
+     * di sini; wallet peternak baru terisi saat peternak klik "Terima"
+     * pesanan, konsisten dengan alur QRIS.
      *
-     * @throws \Exception jika order bukan metode manual atau belum ada bukti diunggah
+     * @throws \Exception jika order bukan metode manual, belum ada bukti
+     *                     diunggah, atau order sudah diproses sebelumnya
      */
     public function confirmManualPayment(Order $order): void
     {
@@ -169,7 +214,7 @@ class PaymentService
             throw new \Exception('Belum ada bukti transfer yang diunggah untuk pesanan ini.');
         }
 
-        if ($order->status !== 'menunggu_konfirmasi' && $order->status !== 'pending') {
+        if ($order->status !== 'menunggu_pembayaran') {
             throw new \Exception('Pesanan ini sudah diproses sebelumnya.');
         }
 

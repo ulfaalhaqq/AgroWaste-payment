@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\PlatformRevenue;
+use App\Models\Shipment;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\Withdrawal;
@@ -16,6 +17,7 @@ class WalletService
     protected const MIN_WITHDRAWAL = 20000;
     protected const WITHDRAWAL_FEE = 2500;
     protected const MIN_HOURS_BETWEEN_WITHDRAWALS = 24;
+    protected const PLATFORM_FEE_PERCENT = 5;
 
     /**
      * Ambil saldo wallet user. Kalau belum pernah ada transaksi masuk,
@@ -33,10 +35,8 @@ class WalletService
      * Aturan:
      * - Minimal Rp 20.000
      * - Jeda minimal 24 jam sejak penarikan terakhir (status pending/diproses/selesai)
-     * - Penarikan pertama dalam sebulan gratis, penarikan berikutnya kena
-     *   fee tetap Rp 2.500
-     *
-     * @throws \Exception jika salah satu aturan di atas dilanggar, atau saldo tidak cukup
+     * - Penarikan pertama dalam sebulan gratis, penarikan berikutnya kena fee tetap Rp 2.500
+     * @throws \Exception jika salah satu aturan di atas dilanggar atau saldo tidak cukup
      */
     public function requestWithdrawal(User $user, float $amount, string $bankName, string $bankAccountNumber, string $bankAccountName): Withdrawal
     {
@@ -79,28 +79,27 @@ class WalletService
 
         return DB::transaction(function () use ($user, $wallet, $amount, $fee, $netAmount, $bankName, $bankAccountNumber, $bankAccountName) {
             $withdrawal = Withdrawal::create([
-                'id'                   => Str::uuid()->toString(),
-                'user_id'              => $user->id,
-                'amount'               => $amount,
-                'fee'                  => $fee,
-                'net_amount'           => $netAmount,
-                'bank_name'            => $bankName,
-                'bank_account_number'  => $bankAccountNumber,
-                'bank_account_name'    => $bankAccountName,
-                'status'               => 'pending',
+                'id' => Str::uuid()->toString(),
+                'user_id' => $user->id,
+                'amount' => $amount,
+                'fee' => $fee,
+                'net_amount' => $netAmount,
+                'bank_name' => $bankName,
+                'bank_account_number' => $bankAccountNumber,
+                'bank_account_name' => $bankAccountName,
+                'status' => 'pending',
             ]);
 
-            // Saldo langsung dikurangi begitu request diajukan, supaya
-            // tidak bisa dipakai lagi untuk request lain sebelum diproses admin.
+            // Saldo langsung dikurangi begitu request diajukan, supaya tidak bisa dipakai lagi untuk request lain sebelum diproses admin.
             $wallet->decrement('balance', $amount);
 
             if ($fee > 0) {
                 PlatformRevenue::create([
-                    'id'            => Str::uuid()->toString(),
-                    'source'        => 'withdrawal_fee',
+                    'id' => Str::uuid()->toString(),
+                    'source' => 'withdrawal_fee',
                     'withdrawal_id' => $withdrawal->id,
-                    'user_id'       => $user->id,
-                    'amount'        => $fee,
+                    'user_id' => $user->id,
+                    'amount' => $fee,
                 ]);
             }
 
@@ -129,12 +128,104 @@ class WalletService
             }
 
             $withdrawal->update([
-                'status'       => $status,
-                'admin_note'   => $adminNote,
+                'status' => $status,
+                'admin_note' => $adminNote,
                 'processed_at' => now(),
             ]);
 
             return $withdrawal;
         });
+    }
+
+    /**
+     * Kurir mengunggah bukti setoran cash COD ke rekening admin.
+     * Status berubah jadi "menunggu_verifikasi", menunggu admin cek.
+     *
+     * @throws \Exception jika shipment tidak dalam status yang tepat
+     */
+    public function uploadCodProof(Shipment $shipment, string $proofPath): Shipment
+    {
+        if ($shipment->cod_deposit_status !== 'menunggu_setor') {
+            throw new \Exception('Pengiriman ini tidak sedang menunggu setoran COD.');
+        }
+
+        $shipment->update([
+            'cod_deposit_status' => 'menunggu_verifikasi',
+            'cod_proof_path' => $proofPath,
+        ]);
+
+        return $shipment;
+    }
+
+    /**
+     * Admin memverifikasi setoran COD dari kurir. Setelah dikonfirmasi,
+     * BARU wallet peternak/penjual (95% subtotal) dan kurir (100% ongkir)
+     * dikreditkan sekaligus — karena baru di titik inilah dana benar-benar dipastikan sampai ke platform.
+     * @throws \Exception jika shipment/order tidak valid untuk diproses
+     */
+    public function confirmCodSettlement(Shipment $shipment): void
+    {
+        if ($shipment->cod_deposit_status !== 'menunggu_verifikasi') {
+            throw new \Exception('Setoran COD ini belum diunggah kurir atau sudah diproses.');
+        }
+
+        $order = $shipment->order;
+        if (!$order || $order->metode_pembayaran !== 'cod') {
+            throw new \Exception('Data pesanan untuk pengiriman ini tidak valid.');
+        }
+
+        DB::transaction(function () use ($shipment, $order) {
+            // Kredit wallet peternak (95% dari subtotal produk)
+            $feeAdmin = round(((float) $order->subtotal_produk) * self::PLATFORM_FEE_PERCENT / 100, 2);
+            $saldoPenjual = ((float) $order->subtotal_produk) - $feeAdmin;
+
+            $sellerWallet = Wallet::firstOrCreate(
+                ['user_id' => $order->peternak_id],
+                ['id' => Str::uuid()->toString(), 'balance' => 0]
+            );
+            $sellerWallet->increment('balance', $saldoPenjual);
+
+            PlatformRevenue::create([
+                'id' => Str::uuid()->toString(),
+                'source' => 'transaction_fee',
+                'order_id' => $order->id,
+                'user_id' => $order->peternak_id,
+                'amount' => $feeAdmin,
+            ]);
+
+            // Kredit wallet kurir (100% ongkir)
+            $courierUserId = $shipment->logistikProfile->user_id ?? null;
+            if ($courierUserId && (float) $order->ongkir > 0) {
+                $courierWallet = Wallet::firstOrCreate(
+                    ['user_id' => $courierUserId],
+                    ['id' => Str::uuid()->toString(), 'balance' => 0]
+                );
+                $courierWallet->increment('balance', (float) $order->ongkir);
+            }
+
+            $shipment->update(['cod_deposit_status' => 'selesai']);
+        });
+    }
+    /**
+     * Admin mencatat bahwa peringatan sudah dikirim ke kurir yang telat menyetor COD. 
+     * Tidak melakukan apa pun ke wallet, cuma menandai waktu peringatan supaya bisa dihitung kapan boleh disuspend.
+     */
+    public function warnLateCodDeposit(Shipment $shipment): void
+    {
+        if ($shipment->cod_deposit_status !== 'menunggu_setor') {
+            throw new \Exception('Pengiriman ini sudah tidak dalam status menunggu setoran.');
+        }
+
+        $shipment->update(['cod_warned_at' => now()]);
+    }
+
+    /**
+     * Cek apakah kurir sudah boleh disuspend (sudah diperingatkan lebih dari 24 jam yang lalu dan masih belum menyetor).
+     */
+    public function isEligibleForCodSuspend(Shipment $shipment): bool
+    {
+        return $shipment->cod_deposit_status === 'menunggu_setor'
+            && $shipment->cod_warned_at !== null
+            && $shipment->cod_warned_at->diffInHours(now()) >= 24;
     }
 }

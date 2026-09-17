@@ -87,7 +87,6 @@ Route::prefix('v1')->group(function () {
             Route::get('/products', [\App\Http\Controllers\Api\ProductController::class, 'adminIndex']);
             Route::put('/products/{id}/status', [\App\Http\Controllers\Api\ProductController::class, 'updateStatus']);
             Route::post('/articles', [\App\Http\Controllers\Api\ArticleController::class, 'store']); // Artikel Edukasi
-
             Route::get('/dashboard', [\App\Http\Controllers\Api\AdminController::class, 'dashboard']);
             Route::get('/users', [\App\Http\Controllers\Api\AdminController::class, 'usersIndex']);
             Route::put('/users/{id}/suspend', [\App\Http\Controllers\Api\AdminController::class, 'suspendUser']);
@@ -99,6 +98,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/withdrawals', [\App\Http\Controllers\Api\WalletController::class, 'adminIndex']);
             Route::put('/withdrawals/{id}/process', [\App\Http\Controllers\Api\WalletController::class, 'adminProcess']);
             Route::put('/orders/{orderId}/confirm-manual-payment', [\App\Http\Controllers\Api\AdminPaymentController::class, 'confirmManualPayment']);
+            Route::put('/shipments/{shipmentId}/confirm-cod', [\App\Http\Controllers\Api\WalletController::class, 'confirmCodSettlement']);
+            Route::put('/shipments/{shipmentId}/warn-cod', [\App\Http\Controllers\Api\WalletController::class, 'warnLateCodDeposit']);
         });
 
         // Notification Routes
@@ -120,6 +121,7 @@ Route::prefix('v1')->group(function () {
         Route::middleware('role:logistik')->prefix('logistik')->group(function () {
             Route::get('/shipments', [\App\Http\Controllers\Api\ShipmentController::class, 'index']);
             Route::put('/shipments/{id}/status', [\App\Http\Controllers\Api\ShipmentController::class, 'updateStatus']);
+            Route::post('/shipments/{shipmentId}/cod-proof', [\App\Http\Controllers\Api\WalletController::class, 'uploadCodProof']);
         });
 
         // Seller Routes (Hanya Peternak)
@@ -132,6 +134,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('wallet')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\WalletController::class, 'show']);
             Route::post('/withdraw', [\App\Http\Controllers\Api\WalletController::class, 'requestWithdrawal']);
+            Route::post('/topup', [\App\Http\Controllers\Api\WalletController::class, 'requestTopUp']);
         });
     });
 

@@ -17,7 +17,7 @@ class CheckoutRequest extends FormRequest
     {
         return [
             'metode_pengiriman' => ['required', 'string', 'in:pickup,logistik'],
-            'metode_pembayaran' => ['required', 'string', 'in:manual,midtrans,cod'],
+            'metode_pembayaran' => ['required', 'string', 'in:manual,midtrans,cod,wallet'],
             // Alamat hanya wajib jika menggunakan jasa logistik
             'alamat_pengiriman' => ['required_if:metode_pengiriman,logistik', 'string', 'nullable'],
             // Ongkir wajib diisi kalau pakai kurir logistik, untuk semua
