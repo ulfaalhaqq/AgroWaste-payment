@@ -110,10 +110,24 @@ class WalletService
     /**
      * Admin memproses (menyelesaikan atau menolak) permintaan penarikan.
      * Kalau ditolak, saldo dikembalikan ke wallet user.
+     *
+     * @throws \Exception jika withdrawal sudah pernah diproses sebelumnya —
+     *                     ini mencegah admin (sengaja atau tidak sengaja,
+     *                     misal double-klik atau race condition dua admin)
+     *                     memproses ulang penarikan yang statusnya sudah
+     *                     final. Tanpa guard ini, memproses ulang sebagai
+     *                     "ditolak" setelah sebelumnya "selesai" akan
+     *                     mengembalikan saldo padahal dana sudah benar-benar
+     *                     ditransfer admin secara manual — user bisa menarik
+     *                     dua kali untuk satu permintaan yang sama.
      */
     public function processWithdrawal(string $withdrawalId, string $status, ?string $adminNote = null): Withdrawal
     {
         $withdrawal = Withdrawal::findOrFail($withdrawalId);
+
+        if ($withdrawal->status !== 'pending') {
+            throw new \Exception('Penarikan ini sudah diproses sebelumnya dan tidak dapat diubah lagi.');
+        }
 
         return DB::transaction(function () use ($withdrawal, $status, $adminNote) {
             if ($status === 'ditolak') {

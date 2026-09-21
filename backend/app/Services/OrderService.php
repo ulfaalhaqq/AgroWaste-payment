@@ -173,10 +173,37 @@ class OrderService
 
     /**
      * Peternak: Terima atau Tolak Pesanan
+     *
+     * @throws \Exception jika order sedang tidak dalam status yang valid
+     *                     untuk transisi yang diminta — ini mencegah order
+     *                     diproses berkali-kali (misal peternak double-klik
+     *                     tombol Terima), yang tanpa validasi ini bisa
+     *                     menyebabkan wallet peternak dikreditkan dua kali,
+     *                     atau pembeli di-refund penuh padahal peternak
+     *                     sudah menerima kreditnya.
      */
     public function processOrderBySeller(string $orderId, string $status, ?string $reason = null)
     {
         $order = \App\Models\Order::findOrFail($orderId);
+
+        // Status order sekarang HARUS ada di daftar ini sebelum boleh
+        // bertransisi ke status yang diminta. COD beda dari QRIS/Manual/
+        // Wallet: COD tidak pernah melalui tahap "konfirmasi pembayaran"
+        // (menunggu_konfirmasi), karena belum ada uang yang perlu
+        // dikonfirmasi — order COD tetap di "menunggu_pembayaran" sejak
+        // checkout sampai peternak Terima/Tolak secara langsung.
+        $isCod = $order->metode_pembayaran === 'cod';
+        $allowedFrom = [
+            'dikonfirmasi' => $isCod ? ['menunggu_pembayaran'] : ['menunggu_konfirmasi'],
+            'ditolak' => $isCod ? ['menunggu_pembayaran'] : ['menunggu_konfirmasi'],
+            'dikirim' => ['dikonfirmasi'],
+        ];
+
+        if (!isset($allowedFrom[$status]) || !in_array($order->status, $allowedFrom[$status], true)) {
+            throw new \Exception(
+                "Tidak dapat mengubah status pesanan dari \"{$order->status}\" menjadi \"{$status}\"."
+            );
+        }
 
         $order->update([
             'status' => $status, // 'dikonfirmasi' atau 'ditolak' atau 'dikirim'
@@ -256,16 +283,24 @@ class OrderService
         $order->update(['status' => 'selesai']);
 
         if ($order->metode_pembayaran === 'cod') {
-            // COD: kurir sedang pegang uang cash dari pembeli. Wallet
-            // peternak & kurir BELUM dikreditkan di sini — menunggu kurir
-            // menyetor ke rekening admin dan diverifikasi (lihat
-            // WalletService::uploadCodProof / confirmCodSettlement).
             $shipment = $order->shipment;
+
             if ($shipment) {
+                // COD + Logistik: kurir sedang pegang uang cash dari
+                // pembeli. Wallet peternak & kurir BELUM dikreditkan di
+                // sini — menunggu kurir menyetor ke rekening admin dan
+                // diverifikasi (lihat WalletService::uploadCodProof /
+                // confirmCodSettlement).
                 $shipment->update([
                     'cod_deposit_status' => 'menunggu_setor',
                     'cod_deadline' => now()->addDay(),
                 ]);
+            } else {
+                // COD + Pickup: tidak ada kurir sama sekali, uang cash
+                // sudah 100% di tangan peternak sejak pembeli mengambil
+                // barang langsung. Tidak perlu tahap setor/verifikasi —
+                // langsung potong kewajiban fee 5% dari wallet peternak.
+                $this->paymentService->chargeCodPickupFee($order);
             }
         } else {
             // QRIS, Manual & Wallet: kredit wallet kurir seperti biasa,

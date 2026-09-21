@@ -128,58 +128,61 @@ class ShipmentService
     }
 
     /**
-     * Cari kurir logistik terdekat berdasarkan koordinat GPS / wilayah
+     * Cari kurir logistik terdekat berdasarkan koordinat GPS.
+     * Kurir yang belum mengisi lokasi (lat/lng kosong) ATAU sedang
+     * disuspend TIDAK PERNAH dipilih otomatis — mereka harus melengkapi
+     * profil / diaktifkan kembali dulu sebelum bisa menerima tugas.
      */
     public static function findClosestCourierForOrder($order)
     {
-        $couriers = \App\Models\LogistikProfile::all();
+        // Hanya kurir dengan lokasi terisi DAN akun tidak disuspend
+        $couriers = \App\Models\LogistikProfile::with('user')
+            ->whereNotNull('lat')
+            ->whereNotNull('lng')
+            ->whereHas('user', function ($q) {
+                $q->where('is_suspended', false);
+            })
+            ->get();
+
         if ($couriers->isEmpty()) {
+            // Tidak ada kurir yang memenuhi syarat — biarkan order tanpa
+            // kurir (logistik_profile_id null), admin perlu menugaskan
+            // manual setelah ada kurir yang valid.
             return null;
         }
 
         $sellerLat = $order->peternak?->peternakProfile?->lat ?? null;
         $sellerLng = $order->peternak?->peternakProfile?->lng ?? null;
-        $sellerKab = strtolower((string)($order->peternak?->peternakProfile?->kabupaten ?? ''));
 
-        if (!is_null($sellerLat) && !is_null($sellerLng)) {
-            $nLat1 = (float)$sellerLat;
-            $nLng1 = (float)$sellerLng;
+        if (is_null($sellerLat) || is_null($sellerLng)) {
+            // Lokasi peternak juga belum ada — tidak bisa hitung jarak
+            // sama sekali, serahkan ke admin untuk menugaskan manual.
+            return null;
+        }
 
-            $bestCourier = null;
-            $minDistance = null;
+        $nLat1 = (float) $sellerLat;
+        $nLng1 = (float) $sellerLng;
 
-            foreach ($couriers as $c) {
-                if (!is_null($c->lat) && !is_null($c->lng)) {
-                    $nLat2 = (float)$c->lat;
-                    $nLng2 = (float)$c->lng;
+        $bestCourier = null;
+        $minDistance = null;
 
-                    $dLat = deg2rad($nLat2 - $nLat1);
-                    $dLng = deg2rad($nLng2 - $nLng1);
-                    $a = sin($dLat / 2) * sin($dLat / 2) +
-                         cos(deg2rad($nLat1)) * cos(deg2rad($nLat2)) *
-                         sin($dLng / 2) * sin($dLng / 2);
-                    $dist = 6371 * 2 * atan2(sqrt($a), sqrt(1 - $a));
+        foreach ($couriers as $c) {
+            $nLat2 = (float) $c->lat;
+            $nLng2 = (float) $c->lng;
 
-                    if (is_null($minDistance) || $dist < $minDistance) {
-                        $minDistance = $dist;
-                        $bestCourier = $c;
-                    }
-                }
-            }
+            $dLat = deg2rad($nLat2 - $nLat1);
+            $dLng = deg2rad($nLng2 - $nLng1);
+            $a = sin($dLat / 2) * sin($dLat / 2) +
+                 cos(deg2rad($nLat1)) * cos(deg2rad($nLat2)) *
+                 sin($dLng / 2) * sin($dLng / 2);
+            $dist = 6371 * 2 * atan2(sqrt($a), sqrt(1 - $a));
 
-            if ($bestCourier) {
-                return $bestCourier;
+            if (is_null($minDistance) || $dist < $minDistance) {
+                $minDistance = $dist;
+                $bestCourier = $c;
             }
         }
 
-        if ($sellerKab) {
-            foreach ($couriers as $c) {
-                if ($c->kabupaten && str_contains(strtolower($c->kabupaten), $sellerKab)) {
-                    return $c;
-                }
-            }
-        }
-
-        return $couriers->first();
+        return $bestCourier;
     }
 }

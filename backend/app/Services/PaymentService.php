@@ -253,4 +253,41 @@ class PaymentService
             $wallet->increment('balance', (float) $order->ongkir);
         });
     }
+
+    /**
+     * Khusus COD + Pickup (tanpa kurir/shipment). Uang sudah 100% di
+     * tangan peternak secara fisik sejak pembeli mengambil barang —
+     * tidak ada apapun yang lewat platform. Yang perlu dicatat cuma
+     * kewajiban fee 5% platform, langsung dipotong dari wallet peternak
+     * tanpa menunggu verifikasi apapun (beda dari COD+logistik yang
+     * masih perlu tahap setor & verifikasi admin, karena di situ ada
+     * uang fisik yang benar-benar berpindah lewat kurir).
+     *
+     * PENTING: saldo wallet peternak BISA MINUS kalau dia belum punya
+     * saldo cukup (misal ini transaksi pertamanya). Ini valid dan
+     * disengaja — dianggap sebagai utang fee yang akan otomatis
+     * terlunasi begitu peternak dapat kredit dari transaksi lain
+     * (QRIS/Manual/Wallet/COD+logistik). Selama saldo minus, penarikan
+     * otomatis terblokir oleh validasi minimal Rp 20.000 yang sudah ada.
+     */
+    public function chargeCodPickupFee(Order $order): void
+    {
+        DB::transaction(function () use ($order) {
+            $feeAdmin = round(((float) $order->subtotal_produk) * self::PLATFORM_FEE_PERCENT / 100, 2);
+
+            $wallet = Wallet::firstOrCreate(
+                ['user_id' => $order->peternak_id],
+                ['id' => Str::uuid()->toString(), 'balance' => 0]
+            );
+            $wallet->decrement('balance', $feeAdmin);
+
+            PlatformRevenue::create([
+                'id' => Str::uuid()->toString(),
+                'source' => 'transaction_fee_cod_pickup',
+                'order_id' => $order->id,
+                'user_id' => $order->peternak_id,
+                'amount' => $feeAdmin,
+            ]);
+        });
+    }
 }
