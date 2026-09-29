@@ -14,10 +14,31 @@ use Illuminate\Support\Str;
 
 class WalletService
 {
-    protected const MIN_WITHDRAWAL = 20000;
-    protected const WITHDRAWAL_FEE = 2500;
-    protected const MIN_HOURS_BETWEEN_WITHDRAWALS = 24;
-    protected const PLATFORM_FEE_PERCENT = 5;
+    // Semua nilai berikut dulu hardcoded sebagai class constant di sini
+    // DAN terpisah lagi di PaymentService — duplikasi yang gampang jadi
+    // tidak sinkron kalau salah satu diubah tapi yang lain lupa. Sekarang
+    // semua baca dari config/agrowaste.php (sumbernya .env), jadi ganti
+    // .env otomatis konsisten di seluruh sistem (QRIS/Manual/Wallet/COD).
+
+    protected static function minWithdrawal(): float
+    {
+        return config('agrowaste.withdrawal.minimum');
+    }
+
+    protected static function withdrawalFee(): float
+    {
+        return config('agrowaste.withdrawal.fee');
+    }
+
+    protected static function minHoursBetweenWithdrawals(): int
+    {
+        return config('agrowaste.withdrawal.min_hours_between');
+    }
+
+    protected static function feePercent(): float
+    {
+        return config('agrowaste.platform_fee_percent');
+    }
 
     /**
      * Ambil saldo wallet user. Kalau belum pernah ada transaksi masuk,
@@ -40,8 +61,8 @@ class WalletService
      */
     public function requestWithdrawal(User $user, float $amount, string $bankName, string $bankAccountNumber, string $bankAccountName): Withdrawal
     {
-        if ($amount < self::MIN_WITHDRAWAL) {
-            throw new \Exception('Minimal penarikan adalah Rp ' . number_format(self::MIN_WITHDRAWAL, 0, ',', '.') . '.');
+        if ($amount < self::minWithdrawal()) {
+            throw new \Exception('Minimal penarikan adalah Rp ' . number_format(self::minWithdrawal(), 0, ',', '.') . '.');
         }
 
         $wallet = Wallet::where('user_id', $user->id)->first();
@@ -57,8 +78,8 @@ class WalletService
 
         if ($lastWithdrawal) {
             $hoursSinceLast = $lastWithdrawal->created_at->diffInMinutes(now()) / 60;
-            if ($hoursSinceLast < self::MIN_HOURS_BETWEEN_WITHDRAWALS) {
-                $sisaJam = (int) ceil(self::MIN_HOURS_BETWEEN_WITHDRAWALS - $hoursSinceLast);
+            if ($hoursSinceLast < self::minHoursBetweenWithdrawals()) {
+                $sisaJam = (int) ceil(self::minHoursBetweenWithdrawals() - $hoursSinceLast);
                 throw new \Exception("Anda baru bisa mengajukan penarikan lagi dalam {$sisaJam} jam.");
             }
         }
@@ -70,7 +91,7 @@ class WalletService
             ->whereYear('created_at', now()->year)
             ->count();
 
-        $fee = $withdrawalCountThisMonth === 0 ? 0 : self::WITHDRAWAL_FEE;
+        $fee = $withdrawalCountThisMonth === 0 ? 0 : self::withdrawalFee();
         $netAmount = $amount - $fee;
 
         if ($netAmount <= 0) {
@@ -190,7 +211,7 @@ class WalletService
 
         DB::transaction(function () use ($shipment, $order) {
             // Kredit wallet peternak (95% dari subtotal produk)
-            $feeAdmin = round(((float) $order->subtotal_produk) * self::PLATFORM_FEE_PERCENT / 100, 2);
+            $feeAdmin = round(((float) $order->subtotal_produk) * self::feePercent() / 100, 2);
             $saldoPenjual = ((float) $order->subtotal_produk) - $feeAdmin;
 
             $sellerWallet = Wallet::firstOrCreate(

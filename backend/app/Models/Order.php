@@ -12,7 +12,28 @@ class Order extends Model
     public $incrementing = false;
     protected $keyType = 'string';
 
-    protected $guarded = [];
+    // Daftar eksplisit kolom yang boleh diisi lewat mass-assignment
+    // (Order::create([...]) atau $order->update([...])). Disusun dari
+    // semua kolom yang benar-benar dipakai di createOrder() (jalur lama)
+    // dan checkout()/processOrderBySeller() (jalur baru) di OrderService.
+    protected $fillable = [
+        'id',
+        'order_number',
+        'user_id',
+        'peternak_id',
+        'buyer_profile_id',
+        'product_id',
+        'status',
+        'metode_pengiriman',
+        'metode_pembayaran',
+        'alamat_pengiriman',
+        'delivery_address',
+        'total_price',
+        'subtotal_produk',
+        'ongkir',
+        'quantity_kg',
+        'rejection_reason',
+    ];
 
     // ── Relasi lama (dipakai oleh createOrder) ─────────────────────────────
 

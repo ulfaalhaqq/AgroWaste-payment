@@ -119,28 +119,32 @@ class OrderController extends Controller
     }
 
     /**
-     * Mengubah status pesanan (Biasanya dilakukan oleh Peternak)
+     * [DINONAKTIFKAN] Dulu dipakai untuk mengubah status pesanan secara
+     * langsung, TAPI endpoint ini tidak pernah memvalidasi:
+     *   - siapa yang boleh memanggilnya (tidak dibatasi role peternak,
+     *     siapapun yang login bisa memakainya)
+     *   - apakah pemanggil adalah pemilik/pihak terkait order ini
+     *   - transisi status yang valid (bisa lompat langsung ke "selesai"
+     *     tanpa melalui "dikonfirmasi"/"dikirim")
+     *   - efek samping bisnis (kredit wallet peternak/kurir tidak pernah
+     *     ikut terpicu, karena logicnya cuma ada di OrderService, method
+     *     ini update kolom status secara langsung tanpa lewat situ)
+     *
+     * Akibatnya order bisa "diselesaikan" secara status tanpa uang
+     * pernah benar-benar dikreditkan ke siapapun, dan siapapun yang
+     * login bisa melakukannya ke order milik orang lain.
+     *
+     * Gunakan PUT /orders/{id}/process (peternak Terima/Tolak) dan
+     * PUT /orders/{id}/complete (pembeli konfirmasi terima) sebagai
+     * gantinya — keduanya sudah melalui OrderService dengan validasi
+     * transisi status dan efek samping wallet yang benar.
      */
     public function updateStatus(\Illuminate\Http\Request $request, $id): JsonResponse
     {
-        $order = \App\Models\Order::find($id);
-
-        if (!$order) {
-            return response()->json(['success' => false, 'message' => 'Pesanan tidak ditemukan.'], 404);
-        }
-
-        // Validasi agar status yang dimasukkan tidak ngawur
-        $request->validate([
-            'status' => 'required|in:dikonfirmasi,dikirim,selesai,dibatalkan'
-        ]);
-
-        $order->update(['status' => $request->status]);
-
         return response()->json([
-            'success' => true, 
-            'message' => 'Status pesanan berhasil diubah.', 
-            'data'    => $order
-        ], 200);
+            'success' => false,
+            'message' => 'Endpoint ini sudah tidak digunakan. Gunakan /orders/{id}/process atau /orders/{id}/complete.',
+        ], 410); // 410 Gone
     }
 
     public function checkout(CheckoutRequest $request): \Illuminate\Http\JsonResponse
@@ -170,13 +174,27 @@ class OrderController extends Controller
             'rejection_reason' => 'required_if:status,ditolak|string|nullable'
         ]);
 
-        $order = $this->orderService->processOrderBySeller($id, $request->status, $request->rejection_reason);
-        return response()->json(['success' => true, 'message' => 'Pesanan berhasil diproses.', 'data' => $order]);
+        try {
+            $order = $this->orderService->processOrderBySeller($id, $request->status, $request->rejection_reason);
+            return response()->json(['success' => true, 'message' => 'Pesanan berhasil diproses.', 'data' => $order]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 
     public function completeByBuyer($id)
     {
-        $order = $this->orderService->completeOrder($id);
-        return response()->json(['success' => true, 'message' => 'Pesanan selesai. Terima kasih!', 'data' => $order]);
+        try {
+            $order = $this->orderService->completeOrder($id);
+            return response()->json(['success' => true, 'message' => 'Pesanan selesai. Terima kasih!', 'data' => $order]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 }

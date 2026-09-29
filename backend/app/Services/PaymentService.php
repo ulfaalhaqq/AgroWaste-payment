@@ -21,7 +21,21 @@ class PaymentService
      * Persentase fee platform yang dipotong dari harga limbah (subtotal_produk),
      * bukan dari ongkir.
      */
-    protected const PLATFORM_FEE_PERCENT = 5;
+    // PLATFORM_FEE_PERCENT dipindah ke config('agrowaste.platform_fee_percent') — baca via helper self::feePercent()
+
+    /**
+     * Persentase fee platform, dibaca dari config/agrowaste.php (yang
+     * sumbernya dari .env: PLATFORM_FEE_PERCENT). Dulu ini hardcoded
+     * sebagai class constant terpisah di PaymentService DAN WalletService
+     * — dua tempat berbeda yang gampang jadi tidak sinkron kalau salah
+     * satu diubah tapi yang lain lupa. Sekarang keduanya baca dari
+     * sumber yang sama, jadi ganti .env otomatis konsisten di semua alur
+     * (QRIS/Manual/Wallet maupun COD).
+     */
+    protected static function feePercent(): float
+    {
+        return config('agrowaste.platform_fee_percent');
+    }
 
     /**
      * Proses unggah bukti transfer manual.
@@ -68,7 +82,7 @@ class PaymentService
     {
         // Konfigurasi Midtrans
         \Midtrans\Config::$serverKey = env('MIDTRANS_SERVER_KEY');
-        \Midtrans\Config::$isProduction = false; // Sandbox mode untuk MVP
+        \Midtrans\Config::$isProduction = config('midtrans.is_production');
         \Midtrans\Config::$isSanitized = true;
         \Midtrans\Config::$is3ds = true;
 
@@ -110,7 +124,7 @@ class PaymentService
     public function getTopUpSnapToken(User $user, float $amount): string
     {
         \Midtrans\Config::$serverKey = env('MIDTRANS_SERVER_KEY');
-        \Midtrans\Config::$isProduction = false;
+        \Midtrans\Config::$isProduction = config('midtrans.is_production');
         \Midtrans\Config::$isSanitized = true;
         \Midtrans\Config::$is3ds = true;
 
@@ -151,7 +165,7 @@ class PaymentService
     public function creditSellerWallet(Order $order): void
     {
         DB::transaction(function () use ($order) {
-            $feeAdmin = round(((float) $order->subtotal_produk) * self::PLATFORM_FEE_PERCENT / 100, 2);
+            $feeAdmin = round(((float) $order->subtotal_produk) * self::feePercent() / 100, 2);
             $saldoPenjual = ((float) $order->subtotal_produk) - $feeAdmin;
 
             $wallet = Wallet::firstOrCreate(
@@ -273,7 +287,7 @@ class PaymentService
     public function chargeCodPickupFee(Order $order): void
     {
         DB::transaction(function () use ($order) {
-            $feeAdmin = round(((float) $order->subtotal_produk) * self::PLATFORM_FEE_PERCENT / 100, 2);
+            $feeAdmin = round(((float) $order->subtotal_produk) * self::feePercent() / 100, 2);
 
             $wallet = Wallet::firstOrCreate(
                 ['user_id' => $order->peternak_id],
@@ -283,7 +297,7 @@ class PaymentService
 
             PlatformRevenue::create([
                 'id' => Str::uuid()->toString(),
-                'source' => 'transaction_fee_cod_pickup',
+                'source' => 'transaction_fee',
                 'order_id' => $order->id,
                 'user_id' => $order->peternak_id,
                 'amount' => $feeAdmin,
