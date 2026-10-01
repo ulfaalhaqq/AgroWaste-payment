@@ -18,7 +18,6 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const [newOrdersCount, setNewOrdersCount] = useState(0);
 
   useEffect(() => {
-    // badge count for new orders
     apiFetch("/seller/dashboard")
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
@@ -52,6 +51,11 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       icon: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z",
     },
     {
+      name: "Saldo & Penarikan",
+      path: "/seller/wallet",
+      icon: "M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0018.75 4.5H5.25A2.25 2.25 0 003 6.75v10.5A2.25 2.25 0 005.25 19.5z",
+    },
+    {
       name: "Lencana Dampak",
       path: "/seller/badges",
       icon: "M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z",
@@ -72,7 +76,6 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       `}
       aria-label="Navigasi seller"
     >
-      {/* Brand Header */}
       <div className="h-20 flex items-center justify-between px-6 pt-4 mb-4">
         <Link
           href="/seller"
@@ -83,7 +86,6 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
             AgroWaste
           </span>
         </Link>
-        {/* Mobile close button */}
         <button
           type="button"
           aria-label="Tutup navigasi"
@@ -107,7 +109,6 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
         </button>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {
           const isActive = pathname === item.path;
@@ -155,7 +156,6 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
         })}
       </nav>
 
-      {/* Logout Button */}
       <div className="p-6 border-t border-white/10">
         <button
           onClick={handleLogout}

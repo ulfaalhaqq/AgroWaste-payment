@@ -16,6 +16,7 @@ import {
   Leaf,
   Navigation,
   QrCode,
+  Wallet,
 } from "lucide-react";
 import { apiFetch, getProductImageUrl } from "@/lib/api";
 import { getToken } from "@/lib/auth";
@@ -57,7 +58,10 @@ interface CartItem {
   product_id: string;
   quantity_kg: string;
   product: CartProduct & {
-    peternak_profile?: { bank_account?: string | null };
+    peternak_profile?: {
+      lat?: string | number | null;
+      lng?: string | number | null;
+    };
   };
 }
 
@@ -68,6 +72,12 @@ interface CheckoutOrder {
   status: string;
   metode_pengiriman: string;
   metode_pembayaran: string;
+}
+
+interface AdminBank {
+  bank_name?: string;
+  account_number?: string;
+  account_name?: string;
 }
 
 function formatRupiah(n: string | number) {
@@ -90,7 +100,7 @@ export default function CheckoutContent() {
     "pickup" | "logistik"
   >("pickup");
   const [metodePembayaran, setMetodePembayaran] = useState<
-    "manual" | "cod" | "midtrans"
+    "manual" | "cod" | "midtrans" | "wallet"
   >("midtrans");
   const [alamatPengiriman, setAlamatPengiriman] = useState("");
   const [gisLat, setGisLat] = useState<string | number>("-7.892400");
@@ -102,6 +112,8 @@ export default function CheckoutContent() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<CheckoutOrder | null>(null);
+  const [adminBank, setAdminBank] = useState<AdminBank | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   // lazy-load Leaflet CDN for Checkout GIS Map
   useEffect(() => {
@@ -212,6 +224,27 @@ export default function CheckoutContent() {
       });
   }, [router]);
 
+  // Rekening tujuan Transfer Manual = rekening admin AgroWaste
+  useEffect(() => {
+    apiFetch("/config/admin-bank")
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success) setAdminBank(json.data as AdminBank);
+      })
+      .catch(() => setAdminBank(null));
+  }, []);
+
+  // Saldo wallet pembeli (ditampilkan kalau memilih metode Wallet)
+  useEffect(() => {
+    if (!getToken()) return;
+    apiFetch("/wallet")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.success) setWalletBalance(Number(json.data?.balance ?? 0));
+      })
+      .catch(() => setWalletBalance(null));
+  }, []);
+
   useEffect(() => {
     if (!successOrder) return;
     const timer = setTimeout(() => router.push("/pesanan"), 4000);
@@ -249,15 +282,16 @@ export default function CheckoutContent() {
   );
   const estimatedShippingCost = shippingCalculation.deliveryCostRaw || EST_SHIPPING;
 
-  // Ongkir hanya digabung ke total tagihan kalau pengiriman logistik
-  // DAN metode bayarnya QRIS/Midtrans — sesuai aturan backend.
-  // Untuk manual/COD, ongkir tetap ditampilkan terpisah (dibayar tunai
-  // langsung ke kurir), tidak menambah Total Tagihan di sini.
-  const ongkirDigabungKeTotal =
-    metodePengiriman === "logistik" && metodePembayaran === "midtrans";
-  const totalTagihan = ongkirDigabungKeTotal
-    ? subtotal + estimatedShippingCost
-    : subtotal;
+  // Ongkir wajib & masuk total tagihan untuk SEMUA metode pembayaran
+  // selama pengiriman = logistik (total_price = subtotal_produk + ongkir).
+  const pakaiOngkir = metodePengiriman === "logistik";
+  const totalTagihan = pakaiOngkir ? subtotal + estimatedShippingCost : subtotal;
+
+  // Pembayaran Wallet: saldo harus cukup untuk total tagihan (all-or-nothing)
+  const saldoKurang =
+    metodePembayaran === "wallet" &&
+    walletBalance !== null &&
+    walletBalance < totalTagihan;
 
   const loadMidtransScript = (): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -299,6 +333,13 @@ export default function CheckoutContent() {
       return;
     }
 
+    if (saldoKurang) {
+      setSubmitError(
+        "Saldo wallet tidak mencukupi. Silakan top up terlebih dahulu.",
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       const finalAlamat =
@@ -314,9 +355,9 @@ export default function CheckoutContent() {
         alamat_pengiriman: finalAlamat,
       };
 
-      // Ongkir cuma dikirim kalau memang akan digabung ke pembayaran
-      // Midtrans. Untuk manual/COD, backend tidak mengharuskan field ini.
-      if (ongkirDigabungKeTotal) {
+      // Ongkir dikirim untuk SEMUA metode pembayaran kalau logistik
+      // (sesuai required_if:metode_pengiriman,logistik di backend).
+      if (pakaiOngkir) {
         checkoutBody.ongkir = estimatedShippingCost;
       }
 
@@ -411,6 +452,9 @@ export default function CheckoutContent() {
         }
       }
 
+      // ── Wallet & COD: tidak ada langkah tambahan di frontend ─────
+      // Wallet: saldo sudah dipotong backend, order langsung
+      // "menunggu_konfirmasi" (tanpa Midtrans Snap).
       setSuccessOrder(orderData);
       window.dispatchEvent(new Event("cart-change"));
     } catch {
@@ -466,7 +510,9 @@ export default function CheckoutContent() {
                   ? "COD (Bayar di Tempat)"
                   : successOrder.metode_pembayaran === "midtrans"
                     ? "QRIS (Midtrans)"
-                    : "Transfer Manual"}
+                    : successOrder.metode_pembayaran === "wallet"
+                      ? "Saldo Wallet"
+                      : "Transfer Manual"}
               </span>
             </div>
           </div>
@@ -776,6 +822,69 @@ export default function CheckoutContent() {
                   </div>
                 </button>
 
+                {/* Saldo Wallet */}
+                <button
+                  type="button"
+                  onClick={() => setMetodePembayaran("wallet")}
+                  className={`w-full relative rounded-2xl p-5 cursor-pointer text-left transition-all duration-200 shadow-sm border-2 ${
+                    metodePembayaran === "wallet"
+                      ? "bg-[#E6F5EC]/50 border-[#009A44]"
+                      : "bg-white border-[#E8E0D5]/60 hover:border-land-clay"
+                  }`}
+                >
+                  {metodePembayaran === "wallet" && (
+                    <div className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-[#009A44] rounded-full text-white flex items-center justify-center shadow-sm">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  <div className="flex gap-4">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        metodePembayaran === "wallet"
+                          ? "bg-[#009A44] text-white"
+                          : "bg-[#F0EDE6] text-land-muted"
+                      }`}
+                    >
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-sm text-land-ink">
+                        Saldo Wallet
+                      </h3>
+                      <p className="text-xs text-land-muted mt-1">
+                        Bayar langsung dari saldo AgroWaste Pay kamu.
+                      </p>
+
+                      {metodePembayaran === "wallet" && (
+                        <div className="mt-3 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-land-muted">Saldo kamu</span>
+                            <span className="font-bold text-land-ink font-tabular">
+                              {walletBalance === null
+                                ? "Memuat..."
+                                : formatRupiah(walletBalance)}
+                            </span>
+                          </div>
+                          {saldoKurang && (
+                            <p className="mt-2 text-red-600 font-semibold">
+                              Saldo tidak cukup (kurang{" "}
+                              {formatRupiah(totalTagihan - (walletBalance ?? 0))}
+                              ).{" "}
+                              <Link
+                                href="/wallet"
+                                className="underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Top up saldo
+                              </Link>
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </button>
+
                 {/* Transfer Manual */}
                 <button
                   type="button"
@@ -811,9 +920,17 @@ export default function CheckoutContent() {
                               Rekening Tujuan
                             </span>
                             <div className="font-bold text-sm text-land-ink">
-                              {cartItems[0]?.product.peternak_profile
-                                ?.bank_account ||
-                                "Menunggu informasi rekening dari penjual"}
+                              {adminBank ? (
+                                <>
+                                  {adminBank.bank_name} ·{" "}
+                                  {adminBank.account_number}
+                                  <div className="text-xs font-normal text-land-muted">
+                                    a.n. {adminBank.account_name}
+                                  </div>
+                                </>
+                              ) : (
+                                "Memuat informasi rekening..."
+                              )}
                             </div>
                           </div>
 
@@ -936,13 +1053,11 @@ export default function CheckoutContent() {
                     {formatRupiah(subtotal)}
                   </span>
                 </div>
-                {metodePengiriman === "logistik" && (
+                {pakaiOngkir && (
                   <div className="flex justify-between text-xs">
                     <span className="text-land-muted">
                       Ongkir{" "}
-                      <em className="not-italic opacity-70">
-                        {ongkirDigabungKeTotal ? "(via QRIS)" : "(estimasi)"}
-                      </em>
+                      <em className="not-italic opacity-70">(estimasi)</em>
                     </span>
                     <span className="font-bold text-land-muted font-tabular">
                       {formatRupiah(estimatedShippingCost)}
@@ -958,55 +1073,25 @@ export default function CheckoutContent() {
                 </span>
               </div>
 
-              {metodePengiriman === "logistik" && !ongkirDigabungKeTotal && (
-                <div className="bg-red-50/80 border border-red-200 rounded-2xl p-4 my-4 shadow-sm space-y-2.5">
-                  <div className="flex items-center justify-between border-b border-red-200/60 pb-2">
-                    <div className="flex items-center gap-2 text-red-700">
-                      <Truck className="w-4 h-4 text-red-600 shrink-0" />
-                      <span className="text-xs font-bold uppercase tracking-wider">
-                        Catatan Ongkos Kirim
-                      </span>
-                    </div>
-                    <span className="px-2.5 py-0.5 bg-red-100 border border-red-200 text-red-700 font-bold text-xs rounded-lg font-tabular">
-                      +{formatRupiah(estimatedShippingCost)}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-red-800 space-y-1.5 pt-0.5">
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-red-500 font-bold">•</span>
-                      <span>
-                        Dihitung terpisah via kalkulator logistik ({shippingCalculation.vehicleType} · {distanceKm.toFixed(1)} km)
-                      </span>
-                    </div>
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-red-500 font-bold">•</span>
-                      <span className="font-bold text-red-700">
-                        Dibayarkan langsung saat barang diterima di tempat
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {metodePengiriman === "logistik" && ongkirDigabungKeTotal && (
+              {pakaiOngkir && (
                 <div className="bg-[#E6F5EC]/60 border border-[#009A44]/20 rounded-2xl p-4 my-4 shadow-sm">
                   <div className="flex items-start gap-2 text-xs text-[#00662D]">
-                    <QrCode className="w-4 h-4 shrink-0 mt-0.5" />
+                    <Truck className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>
-                      Harga produk dan ongkir dibayar sekaligus lewat satu
-                      QRIS. Tidak ada biaya tambahan saat barang diterima.
+                      Ongkir ({shippingCalculation.vehicleType} ·{" "}
+                      {distanceKm.toFixed(1)} km) sudah termasuk dalam Total
+                      Tagihan.
                     </span>
                   </div>
                 </div>
               )}
 
-              {!(metodePengiriman === "logistik") && <div className="mb-6" />}
+              {!pakaiOngkir && <div className="mb-6" />}
 
               {/* CTA */}
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || saldoKurang}
                 className="btn-clay-primary py-4 w-full flex items-center justify-center gap-2 mb-6 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {submitting ? (
@@ -1034,7 +1119,9 @@ export default function CheckoutContent() {
                   <>
                     {metodePembayaran === "midtrans"
                       ? "Bayar dengan QRIS"
-                      : "Konfirmasi Pesanan"}
+                      : metodePembayaran === "wallet"
+                        ? "Bayar dengan Saldo"
+                        : "Konfirmasi Pesanan"}
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}

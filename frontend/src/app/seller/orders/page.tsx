@@ -15,6 +15,8 @@ interface Order {
   id: string;
   order_number?: string;
   total_price: string | number;
+  subtotal_produk?: string | number;
+  ongkir?: string | number;
   status: string;
   metode_pengiriman?: string;
   metode_pembayaran?: string;
@@ -79,6 +81,60 @@ function statusBadge(status: string) {
     default:
       return { label: status, cls: "bg-[#EAE6E1] text-seller-textsecondary" };
   }
+}
+
+// Label metode pembayaran yang enak dibaca.
+// "midtrans" khusus ditampilkan sebagai "QRIS (Midtrans)" karena
+// itu satu-satunya metode yang diproses lewat Midtrans Snap saat ini.
+function paymentMethodLabel(metode?: string) {
+  switch (metode) {
+    case "cod":
+      return "COD (Bayar di Tempat)";
+    case "midtrans":
+      return "QRIS (Midtrans)";
+    case "manual":
+      return "Transfer Manual";
+    default:
+      return metode ?? "—";
+  }
+}
+
+// Status pembayaran ongkir ke kurir.
+// - midtrans (QRIS) & manual (transfer bank): ongkir SUDAH termasuk
+//   di tagihan awal saat checkout (subtotal_produk + ongkir dibayar
+//   sekaligus), jadi otomatis LUNAS begitu order dikonfirmasi.
+// - cod: uang baru pindah tangan saat barang sampai, jadi status
+//   lunas/belumnya masih bergantung pada konfirmasi manual kurir
+//   (disimpan di localStorage lewat form bukti serah terima).
+function getOngkirPaymentInfo(order: Order) {
+  const isCod = order.metode_pembayaran === "cod";
+
+  let proof: { isOngkirPaid?: boolean; fotoPickup?: string; fotoDelivery?: string } | null = null;
+  try {
+    const saved = localStorage.getItem("agrowaste_shipment_proofs");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      proof = parsed[order.id] || null;
+    }
+  } catch {
+    proof = null;
+  }
+
+  const isOngkirPaid = isCod ? (proof?.isOngkirPaid ?? false) : true;
+
+  const label = isOngkirPaid
+    ? isCod
+      ? "LUNAS (DITERIMA KURIR)"
+      : "LUNAS (DIBAYAR SAAT CHECKOUT)"
+    : "BELUM DIBAYAR (COD)";
+
+  return {
+    isCod,
+    isOngkirPaid,
+    label,
+    fotoPickup: proof?.fotoPickup,
+    fotoDelivery: proof?.fotoDelivery,
+  };
 }
 
 function OrdersContent() {
@@ -244,6 +300,18 @@ function OrdersContent() {
           (() => {
             const { label, cls } = statusBadge(order.status);
             const items = order.items ?? [];
+
+            // Breakdown subtotal & ongkir. Untuk pesanan lama (sebelum
+            // field ini ada di backend), fallback ke total_price penuh
+            // sebagai subtotal dan ongkir 0, biar tidak error.
+            const hasBreakdown =
+              order.subtotal_produk !== undefined &&
+              order.ongkir !== undefined;
+            const subtotalProduk = hasBreakdown
+              ? Number(order.subtotal_produk)
+              : Number(order.total_price);
+            const ongkir = hasBreakdown ? Number(order.ongkir) : 0;
+
             return (
               <>
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
@@ -357,10 +425,15 @@ function OrdersContent() {
                         </div>
                         <div>
                           <span className="text-[10px] font-bold text-seller-textsecondary tracking-wider block mb-2">
-                            TOTAL PESANAN
+                            PENDAPATAN PRODUK
                           </span>
+                          {/* Sengaja pakai subtotalProduk, BUKAN order.total_price.
+                              total_price = subtotal_produk + ongkir (uang yang
+                              dibayar buyer). Ongkir itu jatah kurir, bukan
+                              pendapatan seller, jadi tidak ikut ditampilkan
+                              di sini supaya tidak tercampur. */}
                           <span className="text-lg font-bold text-seller-semgreen font-tabular">
-                            {formatRupiah(order.total_price)}
+                            {formatRupiah(subtotalProduk)}
                           </span>
                         </div>
                         {order.status === "ditolak" &&
@@ -454,118 +527,142 @@ function OrdersContent() {
                           </div>
                         )}
                       </div>
-                      <div className="p-6 bg-[#F9F8F6] border-t border-seller-hairline flex justify-between items-center">
-                        <span className="font-bold text-seller-textprimary">
-                          Total Pesanan
-                        </span>
-                        <span className="text-xl font-bold text-seller-textprimary font-tabular">
-                          {formatRupiah(order.total_price)}
-                        </span>
+
+                      {/* Breakdown Subtotal + Ongkir + Total */}
+                      <div className="p-6 bg-[#F9F8F6] border-t border-seller-hairline space-y-2">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-seller-textsecondary">
+                            Subtotal Produk
+                          </span>
+                          <span className="font-semibold text-seller-textprimary font-tabular">
+                            {formatRupiah(subtotalProduk)}
+                          </span>
+                        </div>
+                        {order.metode_pengiriman === "logistik" && (
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-seller-textsecondary">
+                              Ongkos Kirim
+                            </span>
+                            <span className="font-semibold text-seller-textprimary font-tabular">
+                              {formatRupiah(ongkir)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center pt-2 border-t border-seller-hairline/60">
+                          <span className="font-bold text-seller-textprimary">
+                            Total Pesanan
+                          </span>
+                          <span className="text-xl font-bold text-seller-textprimary font-tabular">
+                            {formatRupiah(order.total_price)}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
                     {/* Laporan Logistik & Bukti Foto Kurir */}
-                    {(() => {
-                      const getProofData = (id: string) => {
-                        try {
-                          const saved = localStorage.getItem(
-                            "agrowaste_shipment_proofs",
-                          );
-                          if (saved) {
-                            const parsed = JSON.parse(saved);
-                            return parsed[id] || null;
-                          }
-                        } catch {
-                          return null;
-                        }
-                        return null;
-                      };
+                    {/*
+                      PERBAIKAN LOGIC:
+                      1. Blok ini hanya relevan untuk pengiriman via kurir
+                         (metode_pengiriman === "logistik"), jadi dibungkus
+                         kondisi tersebut.
+                      2. Status "Ongkir Lunas/Belum" sebelumnya SELALU
+                         dibaca dari localStorage (proof.isOngkirPaid).
+                         Ini salah untuk pesanan QRIS (midtrans) & transfer
+                         manual, karena ongkir pada metode itu sudah
+                         dibayar di awal saat checkout (menyatu dengan
+                         subtotal produk dalam satu transaksi Midtrans/TF).
+                         Hanya COD yang benar-benar baru lunas belakangan,
+                         saat kurir konfirmasi terima uang cash.
+                      Lihat fungsi getOngkirPaymentInfo() di atas.
+                    */}
+                    {order.metode_pengiriman === "logistik" &&
+                      (() => {
+                        const {
+                          isCod,
+                          isOngkirPaid,
+                          label: ongkirLabel,
+                          fotoPickup,
+                          fotoDelivery,
+                        } = getOngkirPaymentInfo(order);
 
-                      const proof = getProofData(order.id);
-                      const isOngkirPaid = proof?.isOngkirPaid ?? false;
-                      const fotoPickup = proof?.fotoPickup;
-                      const fotoDelivery = proof?.fotoDelivery;
-
-                      return (
-                        <div className="bg-seller-surfacewhite border border-seller-hairline p-6 rounded-2xl space-y-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-seller-hairline pb-4 gap-2">
-                            <div>
-                              <h3 className="text-lg font-bold text-seller-textprimary">
-                                Laporan Logistik & Bukti Foto Kurir
-                              </h3>
-                              <p className="text-xs text-seller-textsecondary">
-                                Bukti serah terima barang dan status pembayaran
-                                ongkir dari mitra kurir.
-                              </p>
-                            </div>
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider ${
-                                isOngkirPaid
-                                  ? "bg-green-100 text-green-700 border border-green-200"
-                                  : "bg-amber-100 text-amber-800 border border-amber-200"
-                              }`}
-                            >
-                              Ongkir:{" "}
-                              {isOngkirPaid
-                                ? "LUNAS (DITERIMA KURIR)"
-                                : "BELUM DIBAYAR"}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                            {/* Foto Pickup */}
-                            <div className="p-4 bg-seller-warmbg/50 border border-seller-hairline rounded-xl space-y-2">
-                              <span className="text-xs font-bold text-seller-textprimary block">
-                                Foto Bukti Pengambilan (Peternak)
+                        return (
+                          <div className="bg-seller-surfacewhite border border-seller-hairline p-6 rounded-2xl space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-seller-hairline pb-4 gap-2">
+                              <div>
+                                <h3 className="text-lg font-bold text-seller-textprimary">
+                                  Laporan Logistik & Bukti Foto Kurir
+                                </h3>
+                                <p className="text-xs text-seller-textsecondary">
+                                  {isCod
+                                    ? "Bukti serah terima barang dan status pembayaran ongkir dari mitra kurir."
+                                    : "Bukti serah terima barang dari mitra kurir. Ongkir sudah dibayar di muka saat checkout."}
+                                </p>
+                              </div>
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider ${
+                                  isOngkirPaid
+                                    ? "bg-green-100 text-green-700 border border-green-200"
+                                    : "bg-amber-100 text-amber-800 border border-amber-200"
+                                }`}
+                              >
+                                Ongkir: {ongkirLabel}
                               </span>
-                              {fotoPickup ? (
-                                <a
-                                  href={fotoPickup}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="block rounded-xl overflow-hidden h-40 border border-seller-hairline hover:opacity-90 transition-opacity"
-                                >
-                                  <img
-                                    src={fotoPickup}
-                                    alt="Foto Pengambilan"
-                                    className="w-full h-full object-cover"
-                                  />
-                                </a>
-                              ) : (
-                                <div className="h-40 border border-dashed border-seller-hairline rounded-xl flex items-center justify-center text-xs text-seller-textsecondary bg-white">
-                                  Belum ada bukti foto pengambilan
-                                </div>
-                              )}
                             </div>
 
-                            {/* Foto Delivery */}
-                            <div className="p-4 bg-seller-warmbg/50 border border-seller-hairline rounded-xl space-y-2">
-                              <span className="text-xs font-bold text-seller-textprimary block">
-                                Foto Bukti Penyerahan (Diterima Pembeli)
-                              </span>
-                              {fotoDelivery ? (
-                                <a
-                                  href={fotoDelivery}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="block rounded-xl overflow-hidden h-40 border border-seller-hairline hover:opacity-90 transition-opacity"
-                                >
-                                  <img
-                                    src={fotoDelivery}
-                                    alt="Foto Penyerahan"
-                                    className="w-full h-full object-cover"
-                                  />
-                                </a>
-                              ) : (
-                                <div className="h-40 border border-dashed border-seller-hairline rounded-xl flex items-center justify-center text-xs text-seller-textsecondary bg-white">
-                                  Belum ada bukti foto penyerahan
-                                </div>
-                              )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                              {/* Foto Pickup */}
+                              <div className="p-4 bg-seller-warmbg/50 border border-seller-hairline rounded-xl space-y-2">
+                                <span className="text-xs font-bold text-seller-textprimary block">
+                                  Foto Bukti Pengambilan (Peternak)
+                                </span>
+                                {fotoPickup ? (
+                                  <a
+                                    href={fotoPickup}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block rounded-xl overflow-hidden h-40 border border-seller-hairline hover:opacity-90 transition-opacity"
+                                  >
+                                    <img
+                                      src={fotoPickup}
+                                      alt="Foto Pengambilan"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </a>
+                                ) : (
+                                  <div className="h-40 border border-dashed border-seller-hairline rounded-xl flex items-center justify-center text-xs text-seller-textsecondary bg-white">
+                                    Belum ada bukti foto pengambilan
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Foto Delivery */}
+                              <div className="p-4 bg-seller-warmbg/50 border border-seller-hairline rounded-xl space-y-2">
+                                <span className="text-xs font-bold text-seller-textprimary block">
+                                  Foto Bukti Penyerahan (Diterima Pembeli)
+                                </span>
+                                {fotoDelivery ? (
+                                  <a
+                                    href={fotoDelivery}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block rounded-xl overflow-hidden h-40 border border-seller-hairline hover:opacity-90 transition-opacity"
+                                  >
+                                    <img
+                                      src={fotoDelivery}
+                                      alt="Foto Penyerahan"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </a>
+                                ) : (
+                                  <div className="h-40 border border-dashed border-seller-hairline rounded-xl flex items-center justify-center text-xs text-seller-textsecondary bg-white">
+                                    Belum ada bukti foto penyerahan
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })()}
+                        );
+                      })()}
                   </div>
 
                   {/* Sidebar detail */}
@@ -597,10 +694,8 @@ function OrdersContent() {
                           <span className="text-[10px] font-bold text-seller-textsecondary tracking-wider block mb-1">
                             METODE PEMBAYARAN
                           </span>
-                          <p className="font-bold text-seller-textprimary capitalize">
-                            {order.metode_pembayaran === "cod"
-                              ? "COD (Bayar di Tempat)"
-                              : (order.metode_pembayaran ?? "—")}
+                          <p className="font-bold text-seller-textprimary">
+                            {paymentMethodLabel(order.metode_pembayaran)}
                           </p>
                         </div>
 
@@ -636,6 +731,27 @@ function OrdersContent() {
                               </p>
                             </div>
                           )}
+
+                        {order.metode_pembayaran === "midtrans" && (
+                          <div className="pt-4 border-t border-seller-hairline">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] font-bold text-emerald-700">
+                              <svg
+                                className="w-3.5 h-3.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M5 13l4 4L19 7"
+                                />
+                              </svg>
+                              Dibayar otomatis via QRIS
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -751,7 +867,8 @@ function OrdersContent() {
               <thead className="bg-[#F9F8F6] text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider border-b border-seller-hairline">
                 <tr>
                   <th className="px-6 py-4">Detail Pesanan</th>
-                  <th className="px-6 py-4">Total</th>
+                  <th className="px-6 py-4">Pendapatan Produk</th>
+                  <th className="px-6 py-4">Pembayaran</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Aksi</th>
                 </tr>
@@ -760,7 +877,7 @@ function OrdersContent() {
                 {loading && (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={5}
                       className="px-6 py-8 text-center text-seller-textsecondary text-xs animate-pulse"
                     >
                       Memuat pesanan...
@@ -770,7 +887,7 @@ function OrdersContent() {
                 {!loading && visible.length === 0 && (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={5}
                       className="px-6 py-8 text-center text-seller-textsecondary text-xs"
                     >
                       {search
@@ -791,6 +908,16 @@ function OrdersContent() {
                     const isPending =
                       order.status === "menunggu_pembayaran" ||
                       order.status === "menunggu_konfirmasi";
+                    // Pendapatan seller = subtotal_produk saja, TANPA ongkir.
+                    // order.total_price adalah total yang dibayar buyer
+                    // (subtotal_produk + ongkir), jadi tidak dipakai di sini
+                    // agar pendapatan seller tidak tercampur uang kurir.
+                    const hasBreakdown =
+                      order.subtotal_produk !== undefined &&
+                      order.ongkir !== undefined;
+                    const pendapatanProduk = hasBreakdown
+                      ? Number(order.subtotal_produk)
+                      : Number(order.total_price);
                     return (
                       <tr
                         key={order.id}
@@ -808,7 +935,12 @@ function OrdersContent() {
                           </div>
                         </td>
                         <td className="px-6 py-4 font-bold text-seller-textprimary font-tabular">
-                          {formatRupiah(order.total_price)}
+                          {formatRupiah(pendapatanProduk)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-xs font-semibold text-seller-textsecondary">
+                            {paymentMethodLabel(order.metode_pembayaran)}
+                          </span>
                         </td>
                         <td className="px-6 py-4">
                           <span

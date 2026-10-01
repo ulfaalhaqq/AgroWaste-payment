@@ -366,11 +366,16 @@ function buildChartBars(
   return { bars, ySteps };
 }
 
+// Fee platform 5% — harus sama persis dengan yang dipotong backend
+// (WalletService) saat pesanan selesai dan dana masuk ke wallet peternak.
+const PLATFORM_FEE_RATE = 0.05;
+
 export default function OverviewPage() {
   const [userName, setUserName] = useState("Peternak");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [today, setToday] = useState("");
   const [timeRange, setTimeRange] = useState<"7d" | "1m" | "1y">("7d");
@@ -392,11 +397,17 @@ export default function OverviewPage() {
       apiFetch("/orders")
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
-    ]).then(([dashRes, ordersRes]) => {
+      apiFetch("/wallet")
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    ]).then(([dashRes, ordersRes, walletRes]) => {
       if (dashRes?.success) setStats(dashRes.data as DashboardStats);
       if (ordersRes?.success && Array.isArray(ordersRes.data)) {
         setAllOrders(ordersRes.data as Order[]);
         setOrders((ordersRes.data as Order[]).slice(0, 3));
+      }
+      if (walletRes?.success) {
+        setWalletBalance(Number(walletRes.data?.balance ?? 0));
       }
       setLoading(false);
     });
@@ -412,10 +423,12 @@ export default function OverviewPage() {
   const totalPendapatan = useMemo(() => {
     const VALID_STATUSES = ["dikonfirmasi", "diproses", "dikirim", "selesai"];
     const valid = allOrders.filter((o) => VALID_STATUSES.includes(o.status));
-    if (valid.length > 0) {
-      return valid.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
-    }
-    return Number(stats?.total_pendapatan || 0);
+    const gross =
+      valid.length > 0
+        ? valid.reduce((acc, o) => acc + Number(o.total_price || 0), 0)
+        : Number(stats?.total_pendapatan || 0);
+
+    return gross * (1 - PLATFORM_FEE_RATE);
   }, [allOrders, stats]);
 
   const totalKgTerjual = useMemo(() => {
@@ -504,9 +517,9 @@ export default function OverviewPage() {
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Pendapatan */}
-          <div className="bg-seller-surfacewhite border border-seller-hairline p-4 sm:p-6 rounded-xl sm:rounded-2xl flex flex-col justify-between group transition-colors hover:border-seller-primary/20">
-            <div className="flex justify-between items-start mb-2 sm:mb-4">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-seller-primary-light text-seller-primary flex items-center justify-center group-hover:bg-seller-primary/20 transition-colors">
+          <div className="bg-seller-surfacewhite border border-seller-hairline p-4 sm:p-6 rounded-xl sm:rounded-2xl flex flex-col gap-3 sm:gap-4 group transition-colors hover:border-seller-primary/20">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-seller-primary-light text-seller-primary flex items-center justify-center group-hover:bg-seller-primary/20 transition-colors">
                 <svg
                   className="w-4 h-4 sm:w-5 sm:h-5"
                   fill="none"
@@ -521,35 +534,61 @@ export default function OverviewPage() {
                   />
                 </svg>
               </div>
+              <div>
+                <span className="text-[9px] sm:text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider block mb-0.5">
+                  PENDAPATAN BERSIH
+                </span>
+                <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-seller-textprimary font-tabular">
+                  {formatRupiah(totalPendapatan)}
+                </h3>
+              </div>
             </div>
-            <div>
-              <span className="text-[9px] sm:text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider block mb-0.5 sm:mb-1">
-                PENDAPATAN
-              </span>
-              <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-seller-textprimary font-tabular">
-                {formatRupiah(totalPendapatan)}
-              </h3>
-            </div>
+
+            {/* Info Saldo Tersedia — link ke menu Saldo */}
+            <Link
+              href="/seller/wallet"
+              className="flex items-center justify-between gap-2 px-3 py-2.5 bg-seller-primary rounded-lg hover:bg-seller-primary-hover transition-colors group/wallet"
+            >
+              <div className="min-w-0">
+                <span className="text-[9px] font-bold text-white/70 uppercase tracking-wider block">
+                  Saldo Bisa Ditarik
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-white font-tabular truncate block">
+                  {formatRupiah(walletBalance)}
+                </span>
+              </div>
+              <svg
+                className="w-4 h-4 text-white shrink-0 group-hover/wallet:translate-x-0.5 transition-transform"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+            </Link>
           </div>
 
           {/* Volume Terjual */}
-          <div className="bg-seller-surfacewhite border border-seller-hairline p-4 sm:p-6 rounded-xl sm:rounded-2xl flex flex-col justify-between group transition-colors hover:border-seller-primary/20">
-            <div className="flex justify-between items-start mb-2 sm:mb-4">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-100 transition-colors">
-                <svg
-                  className="w-4 h-4 sm:w-5 sm:h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                  />
-                </svg>
-              </div>
+          <div className="bg-seller-surfacewhite border border-seller-hairline p-4 sm:p-6 rounded-xl sm:rounded-2xl flex flex-col justify-center gap-2 sm:gap-3 group transition-colors hover:border-seller-primary/20">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-100 transition-colors">
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                />
+              </svg>
             </div>
             <div>
               <span className="text-[9px] sm:text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider block mb-0.5 sm:mb-1">
@@ -562,28 +601,26 @@ export default function OverviewPage() {
           </div>
 
           {/* Pesanan Baru */}
-          <div className="bg-seller-surfacewhite border border-seller-hairline p-4 sm:p-6 rounded-xl sm:rounded-2xl flex flex-col justify-between group transition-colors hover:border-seller-primary/20">
-            <div className="flex justify-between items-start mb-2 sm:mb-4">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-seller-primary-light text-seller-primary flex items-center justify-center group-hover:bg-seller-primary/20 transition-colors">
-                <svg
-                  className="w-4 h-4 sm:w-5 sm:h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-                  />
-                </svg>
-              </div>
-              {stats && stats.pesanan_baru > 0 && (
-                <span className="text-[10px] font-bold text-white bg-seller-semgreen px-2 py-0.5 rounded-full">
-                  {stats.pesanan_baru} Baru
-                </span>
-              )}
+          <div className="bg-seller-surfacewhite border border-seller-hairline p-4 sm:p-6 rounded-xl sm:rounded-2xl flex flex-col justify-center gap-2 sm:gap-3 group transition-colors hover:border-seller-primary/20 relative">
+            {stats && stats.pesanan_baru > 0 && (
+              <span className="absolute top-3 right-3 text-[10px] font-bold text-white bg-seller-semgreen px-2 py-0.5 rounded-full">
+                {stats.pesanan_baru} Baru
+              </span>
+            )}
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-seller-primary-light text-seller-primary flex items-center justify-center group-hover:bg-seller-primary/20 transition-colors">
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                />
+              </svg>
             </div>
             <div>
               <span className="text-[9px] sm:text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider block mb-0.5 sm:mb-1">
@@ -596,23 +633,21 @@ export default function OverviewPage() {
           </div>
 
           {/* Total Produk */}
-          <div className="bg-seller-surfacewhite border border-seller-hairline p-4 sm:p-6 rounded-xl sm:rounded-2xl flex flex-col justify-between group transition-colors hover:border-seller-primary/20">
-            <div className="flex justify-between items-start mb-2 sm:mb-4">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                <svg
-                  className="w-4 h-4 sm:w-5 sm:h-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
-                  />
-                </svg>
-              </div>
+          <div className="bg-seller-surfacewhite border border-seller-hairline p-4 sm:p-6 rounded-xl sm:rounded-2xl flex flex-col justify-center gap-2 sm:gap-3 group transition-colors hover:border-seller-primary/20">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                />
+              </svg>
             </div>
             <div>
               <span className="text-[9px] sm:text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider block mb-0.5 sm:mb-1">
