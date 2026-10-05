@@ -16,6 +16,7 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
   const router = useRouter();
 
   const [pendingCount, setPendingCount] = useState(0);
+  const [codDepositCount, setCodDepositCount] = useState(0);
 
   useEffect(() => {
     apiFetch("/logistik/shipments")
@@ -29,6 +30,13 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
               s.status !== "terkirim" && s.status !== "selesai",
           ).length;
           setPendingCount(active);
+
+          // setoran COD yang masih harus disetor ke admin
+          const codWaiting = list.filter(
+            (s: { cod_deposit_status?: string | null }) =>
+              s.cod_deposit_status === "menunggu_setor",
+          ).length;
+          setCodDepositCount(codWaiting);
         }
       })
       .catch(() => {});
@@ -55,6 +63,12 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
       path: "/courier/shipments",
       badge: pendingCount > 0 ? pendingCount : undefined,
       icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4",
+    },
+    {
+      name: "Wallet",
+      path: "/courier/wallet",
+      badge: codDepositCount > 0 ? codDepositCount : undefined,
+      icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
     },
     {
       name: "Settings",

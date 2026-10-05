@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CheckCircle, Clock, Wallet } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 interface Withdrawal {
@@ -25,6 +26,9 @@ interface WalletData {
 const MIN_WITHDRAWAL = 20000;
 const WITHDRAWAL_COOLDOWN_HOURS = 24;
 const WITHDRAWAL_FEE = 2500;
+// Backend hanya menghitung penarikan berstatus ini untuk jeda 24 jam dan
+// penarikan gratis pertama tiap bulan (yang "ditolak" tidak dihitung).
+const COUNTED_STATUSES = ["pending", "diproses", "selesai"];
 
 function formatRupiah(n: string | number) {
   return new Intl.NumberFormat("id-ID", {
@@ -98,38 +102,45 @@ export default function SellerWalletPage() {
     setFormError(null);
   };
 
-  // Penarikan TERAKHIR berdasarkan created_at (bukan cuma elemen pertama di
-  // array — urutan dari API tidak dijamin selalu terbaru duluan), dipakai
-  // untuk mengecek jeda minimal 24 jam antar penarikan.
+  const withdrawals = wallet?.withdrawals ?? [];
+  const countedWithdrawals = withdrawals.filter((w) =>
+    COUNTED_STATUSES.includes(w.status),
+  );
+
+  // Penarikan TERAKHIR berdasarkan created_at (urutan dari API tidak dijamin
+  // terbaru duluan), dipakai untuk mengecek jeda minimal 24 jam.
   const getLastWithdrawal = (): Withdrawal | null => {
-    if (!wallet?.withdrawals || wallet.withdrawals.length === 0) return null;
-    return [...wallet.withdrawals].sort(
+    if (countedWithdrawals.length === 0) return null;
+    return [...countedWithdrawals].sort(
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )[0];
   };
 
-  // Hitung berapa kali sudah menarik saldo BULAN INI (bulan & tahun kalender
-  // berjalan), untuk menentukan apakah penarikan berikutnya masih gratis
-  // (penarikan ke-1) atau kena biaya admin Rp 2.500 (penarikan ke-2 dst).
-  const getWithdrawalCountThisMonth = (): number => {
-    if (!wallet?.withdrawals) return 0;
+  // Jumlah penarikan BULAN INI (bulan & tahun kalender berjalan) untuk
+  // menentukan penarikan berikutnya gratis (ke-1) atau kena biaya (ke-2 dst).
+  const withdrawalCountThisMonth = countedWithdrawals.filter((w) => {
+    const d = new Date(w.created_at);
     const now = new Date();
-    return wallet.withdrawals.filter((w) => {
-      const d = new Date(w.created_at);
-      return (
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth()
-      );
-    }).length;
-  };
+    return (
+      d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+    );
+  }).length;
 
-  const withdrawalCountThisMonth = getWithdrawalCountThisMonth();
   const isNextWithdrawalFree = withdrawalCountThisMonth === 0;
-  // Estimasi biaya admin untuk penarikan yang SEDANG diajukan di modal ini.
-  // Ini hanya estimasi tampilan di frontend — nilai fee final yang tersimpan
-  // tetap ditentukan & dihitung ulang oleh backend saat memproses request.
+  // Hanya estimasi tampilan; fee final dihitung ulang oleh backend.
   const estimatedFee = isNextWithdrawalFree ? 0 : WITHDRAWAL_FEE;
+
+  // Statistik ringkas
+  const inProgress = withdrawals.filter(
+    (w) => w.status === "pending" || w.status === "diproses",
+  );
+  const inProgressTotal = inProgress.reduce(
+    (acc, w) => acc + Number(w.amount || 0),
+    0,
+  );
+  const done = withdrawals.filter((w) => w.status === "selesai");
+  const doneTotal = done.reduce((acc, w) => acc + Number(w.net_amount || 0), 0);
 
   const handleSubmitWithdraw = async () => {
     setFormError(null);
@@ -210,6 +221,28 @@ export default function SellerWalletPage() {
     }
   };
 
+  const rules = [
+    { label: "Minimal penarikan", value: formatRupiah(MIN_WITHDRAWAL) },
+    { label: "Penarikan pertama tiap bulan", value: "Gratis" },
+    { label: "Biaya penarikan berikutnya", value: formatRupiah(WITHDRAWAL_FEE) },
+    { label: "Jeda antar penarikan", value: `${WITHDRAWAL_COOLDOWN_HOURS} jam` },
+  ];
+
+  const steps = [
+    {
+      title: "Ajukan penarikan",
+      desc: "Saldo langsung dikurangi sebesar nominal yang diajukan.",
+    },
+    {
+      title: "Admin memproses",
+      desc: "Admin memeriksa dan mentransfer manual ke rekening Anda, maksimal 1x24 jam.",
+    },
+    {
+      title: "Selesai atau ditolak",
+      desc: "Status berubah jadi Selesai. Jika ditolak, saldo dikembalikan penuh.",
+    },
+  ];
+
   return (
     <>
       <div className="space-y-6 animate-fade-in pb-10">
@@ -223,116 +256,250 @@ export default function SellerWalletPage() {
           </p>
         </div>
 
-        {/* Kartu Saldo Utama */}
-        <div className="bg-seller-primary rounded-2xl p-6 lg:p-8 text-white flex flex-col justify-between relative overflow-hidden shadow-lg shadow-seller-primary/20">
-          <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-white opacity-5 rounded-full blur-2xl pointer-events-none" />
+        {/* Baris ringkasan: saldo (2 kolom) + 2 kartu statistik */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Saldo */}
+          <div className="col-span-2 bg-seller-primary rounded-2xl p-6 text-white relative overflow-hidden shadow-lg shadow-seller-primary/20 flex flex-col sm:flex-row sm:items-stretch justify-between gap-6">
+            <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-white opacity-5 rounded-full blur-2xl pointer-events-none" />
+            <div className="flex flex-col justify-between gap-5 relative">
+              <div>
+                <span className="flex items-center gap-2 text-xs font-bold text-white/70 uppercase tracking-wider mb-2">
+                  <Wallet className="w-4 h-4" />
+                  Saldo Tersedia
+                </span>
+                <span className="text-4xl xl:text-5xl font-bold tracking-tight font-tabular block">
+                  {loading ? "..." : formatRupiah(wallet?.balance ?? 0)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                className="self-start px-6 py-3 bg-white text-seller-primary rounded-xl font-bold text-sm shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                Tarik Saldo
+              </button>
+            </div>
 
-          <span className="text-xs font-bold text-white/70 uppercase tracking-wider mb-3 block">
-            Saldo Tersedia
-          </span>
-
-          <div className="flex items-baseline gap-3 mb-6">
-            <span className="text-4xl sm:text-5xl font-bold tracking-tight font-tabular">
-              {loading ? "..." : formatRupiah(wallet?.balance ?? 0)}
-            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-1 gap-3 sm:min-w-[180px] relative">
+              <div className="bg-white/10 rounded-xl px-4 py-3 flex flex-col justify-center">
+                <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider">
+                  Penarikan bulan ini
+                </span>
+                <span className="text-lg font-bold">
+                  {withdrawalCountThisMonth}x
+                </span>
+              </div>
+              <div className="bg-white/10 rounded-xl px-4 py-3 flex flex-col justify-center">
+                <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider">
+                  Biaya penarikan berikutnya
+                </span>
+                <span className="text-lg font-bold font-tabular">
+                  {isNextWithdrawalFree ? "Gratis" : formatRupiah(estimatedFee)}
+                </span>
+              </div>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="w-full sm:w-auto self-start px-6 py-3 bg-white text-seller-primary rounded-xl font-bold text-sm shadow-sm hover:bg-gray-50 transition-colors"
-          >
-            Tarik Saldo
-          </button>
+          {/* Sedang diproses */}
+          <div className="bg-seller-surfacewhite border border-seller-hairline rounded-2xl p-5 flex flex-col justify-between gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider">
+                Sedang Diproses
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <Clock className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold text-seller-textprimary">
+                {loading ? "..." : inProgress.length}
+              </div>
+              <div className="text-xs text-seller-textsecondary mt-1 font-tabular">
+                Total {formatRupiah(inProgressTotal)}
+              </div>
+              <div className="text-[11px] text-seller-textsecondary mt-1.5">
+                Menunggu transfer dari admin
+              </div>
+            </div>
+          </div>
+
+          {/* Total diterima */}
+          <div className="bg-seller-surfacewhite border border-seller-hairline rounded-2xl p-5 flex flex-col justify-between gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider">
+                Total Diterima
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-seller-primary-light text-seller-semgreen flex items-center justify-center">
+                <CheckCircle className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold text-seller-textprimary">
+                {loading ? "..." : done.length}
+                <span className="text-sm font-semibold text-seller-textsecondary">
+                  {" "}
+                  penarikan
+                </span>
+              </div>
+              <div className="text-xs text-seller-textsecondary mt-1 font-tabular">
+                Total {formatRupiah(doneTotal)}
+              </div>
+              <div className="text-[11px] text-seller-textsecondary mt-1.5">
+                Sudah masuk ke rekening Anda
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Riwayat Penarikan */}
-        <div className="bg-seller-surfacewhite border border-seller-hairline rounded-2xl overflow-hidden">
-          <div className="p-5 border-b border-seller-hairline">
-            <h3 className="text-base font-bold text-seller-textprimary">
-              Riwayat Penarikan
-            </h3>
-          </div>
+        {/* Baris utama: riwayat (kiri) + aturan & alur (kanan) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Riwayat Penarikan */}
+          <div className="lg:col-span-8 bg-seller-surfacewhite border border-seller-hairline rounded-2xl overflow-hidden">
+            <div className="p-5 border-b border-seller-hairline flex items-center justify-between">
+              <h3 className="text-base font-bold text-seller-textprimary">
+                Riwayat Penarikan
+              </h3>
+              <span className="text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider">
+                {withdrawals.length} transaksi
+              </span>
+            </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-[#F9F8F6] text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider border-b border-seller-hairline">
-                <tr>
-                  <th className="px-5 py-3">Tanggal</th>
-                  <th className="px-5 py-3">Nominal</th>
-                  <th className="px-5 py-3">Biaya Admin</th>
-                  <th className="px-5 py-3">Diterima</th>
-                  <th className="px-5 py-3">Rekening Tujuan</th>
-                  <th className="px-5 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-seller-hairline bg-white">
-                {loading && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-[#F9F8F6] text-[10px] font-bold text-seller-textsecondary uppercase tracking-wider border-b border-seller-hairline">
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-5 py-8 text-center text-seller-textsecondary text-xs animate-pulse"
-                    >
-                      Memuat riwayat...
-                    </td>
+                    <th className="px-5 py-3">Tanggal</th>
+                    <th className="px-5 py-3">Nominal</th>
+                    <th className="px-5 py-3">Rekening Tujuan</th>
+                    <th className="px-5 py-3 text-right">Status</th>
                   </tr>
-                )}
-                {!loading &&
-                  (!wallet?.withdrawals || wallet.withdrawals.length === 0) && (
+                </thead>
+                <tbody className="divide-y divide-seller-hairline bg-white">
+                  {loading && (
                     <tr>
                       <td
-                        colSpan={6}
-                        className="px-5 py-8 text-center text-seller-textsecondary text-xs"
+                        colSpan={4}
+                        className="px-5 py-8 text-center text-seller-textsecondary text-xs animate-pulse"
                       >
-                        Belum ada riwayat penarikan.
+                        Memuat riwayat...
                       </td>
                     </tr>
                   )}
-                {!loading &&
-                  wallet?.withdrawals.map((w) => {
-                    const { label, cls } = withdrawalStatusInfo(w.status);
-                    return (
-                      <tr
-                        key={w.id}
-                        className="hover:bg-seller-warmbg/30 transition-colors"
-                      >
-                        <td className="px-5 py-3.5 text-xs text-seller-textsecondary">
-                          {formatDate(w.created_at)}
-                        </td>
-                        <td className="px-5 py-3.5 font-bold text-seller-textprimary font-tabular">
-                          {formatRupiah(w.amount)}
-                        </td>
-                        <td className="px-5 py-3.5 text-xs text-seller-textsecondary font-tabular">
-                          {formatRupiah(w.fee)}
-                        </td>
-                        <td className="px-5 py-3.5 font-bold text-seller-semgreen font-tabular">
-                          {formatRupiah(w.net_amount)}
-                        </td>
-                        <td className="px-5 py-3.5 text-xs">
-                          <div className="font-semibold text-seller-textprimary">
-                            {w.bank_name}
-                          </div>
-                          <div className="text-seller-textsecondary">
-                            {w.bank_account_number} a.n. {w.bank_account_name}
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider ${cls}`}
-                          >
-                            {label}
-                          </span>
-                          {w.status === "ditolak" && w.admin_note && (
-                            <p className="text-[10px] text-red-600 mt-1 max-w-[200px] whitespace-normal">
-                              {w.admin_note}
-                            </p>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
+                  {!loading && withdrawals.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-10 text-center">
+                        <p className="text-sm font-bold text-seller-textprimary">
+                          Belum ada penarikan
+                        </p>
+                        <p className="text-xs text-seller-textsecondary mt-1">
+                          Saldo hasil penjualan bisa ditarik lewat tombol Tarik
+                          Saldo.
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                  {!loading &&
+                    withdrawals.map((w) => {
+                      const { label, cls } = withdrawalStatusInfo(w.status);
+                      return (
+                        <tr
+                          key={w.id}
+                          className="hover:bg-seller-warmbg/30 transition-colors align-top"
+                        >
+                          <td className="px-5 py-4 text-xs text-seller-textsecondary whitespace-nowrap">
+                            {formatDate(w.created_at)}
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            <div className="font-bold text-seller-textprimary font-tabular">
+                              {formatRupiah(w.amount)}
+                            </div>
+                            <div className="text-[11px] text-seller-textsecondary font-tabular">
+                              Diterima{" "}
+                              <span className="font-bold text-seller-semgreen">
+                                {formatRupiah(w.net_amount)}
+                              </span>
+                              {Number(w.fee) > 0
+                                ? ` · biaya ${formatRupiah(w.fee)}`
+                                : ""}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-xs">
+                            <div className="font-semibold text-seller-textprimary">
+                              {w.bank_name}
+                            </div>
+                            <div className="text-seller-textsecondary">
+                              {w.bank_account_number} a.n. {w.bank_account_name}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            <span
+                              className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider ${cls}`}
+                            >
+                              {label}
+                            </span>
+                            {w.status === "ditolak" && w.admin_note && (
+                              <p className="text-[10px] text-red-600 mt-1 max-w-[200px] ml-auto whitespace-normal">
+                                {w.admin_note}
+                              </p>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Kolom kanan: ikut terbawa saat riwayat panjang di-scroll */}
+          <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-6">
+            {/* Aturan penarikan */}
+            <div className="bg-seller-surfacewhite border border-seller-hairline rounded-2xl overflow-hidden">
+              <div className="p-5 border-b border-seller-hairline">
+                <h3 className="text-base font-bold text-seller-textprimary">
+                  Aturan Penarikan
+                </h3>
+              </div>
+              <div className="divide-y divide-seller-hairline">
+                {rules.map((r) => (
+                  <div
+                    key={r.label}
+                    className="px-5 py-3 flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="text-seller-textsecondary">{r.label}</span>
+                    <span className="font-bold text-seller-textprimary font-tabular">
+                      {r.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Alur penarikan */}
+            <div className="bg-seller-surfacewhite border border-seller-hairline rounded-2xl overflow-hidden">
+              <div className="p-5 border-b border-seller-hairline">
+                <h3 className="text-base font-bold text-seller-textprimary">
+                  Alur Penarikan
+                </h3>
+              </div>
+              <div className="p-5 space-y-4">
+                {steps.map((s, i) => (
+                  <div key={s.title} className="flex gap-3">
+                    <div className="w-6 h-6 shrink-0 rounded-full bg-seller-primary-light text-seller-semgreen text-xs font-bold flex items-center justify-center">
+                      {i + 1}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-seller-textprimary">
+                        {s.title}
+                      </div>
+                      <div className="text-xs text-seller-textsecondary leading-relaxed">
+                        {s.desc}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -530,4 +697,4 @@ export default function SellerWalletPage() {
       )}
     </>
   );
-} 
+}
