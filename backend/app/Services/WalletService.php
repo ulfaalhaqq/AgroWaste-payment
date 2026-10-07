@@ -8,6 +8,7 @@ use App\Models\PlatformRevenue;
 use App\Models\Shipment;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Models\WalletTransaction;
 use App\Models\Withdrawal;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -38,6 +39,20 @@ class WalletService
     protected static function feePercent(): float
     {
         return config('agrowaste.platform_fee_percent');
+    }
+
+    /**
+     * Catat mutasi transaksi wallet.
+     */
+    public function recordTransaction(string $userId, string $type, float $amount, ?string $description = null, string $status = 'success'): WalletTransaction
+    {
+        return WalletTransaction::create([
+            'user_id'     => $userId,
+            'type'        => $type,         // 'topup', 'withdrawal', 'payment', 'income'
+            'amount'      => $amount,
+            'description' => $description,
+            'status'      => $status,
+        ]);
     }
 
     /**
@@ -114,6 +129,14 @@ class WalletService
             // Saldo langsung dikurangi begitu request diajukan, supaya tidak bisa dipakai lagi untuk request lain sebelum diproses admin.
             $wallet->decrement('balance', $amount);
 
+            // Catat mutasi penarikan
+            $this->recordTransaction(
+                $user->id,
+                'withdrawal',
+                $amount,
+                "Penarikan saldo ke rekening {$bankName} ({$bankAccountNumber})"
+            );
+
             if ($fee > 0) {
                 PlatformRevenue::create([
                     'id' => Str::uuid()->toString(),
@@ -132,15 +155,7 @@ class WalletService
      * Admin memproses (menyelesaikan atau menolak) permintaan penarikan.
      * Kalau ditolak, saldo dikembalikan ke wallet user.
      *
-     * @throws \Exception jika withdrawal sudah pernah diproses sebelumnya —
-     *                     ini mencegah admin (sengaja atau tidak sengaja,
-     *                     misal double-klik atau race condition dua admin)
-     *                     memproses ulang penarikan yang statusnya sudah
-     *                     final. Tanpa guard ini, memproses ulang sebagai
-     *                     "ditolak" setelah sebelumnya "selesai" akan
-     *                     mengembalikan saldo padahal dana sudah benar-benar
-     *                     ditransfer admin secara manual — user bisa menarik
-     *                     dua kali untuk satu permintaan yang sama.
+     * @throws \Exception jika withdrawal sudah pernah diproses sebelumnya
      */
     public function processWithdrawal(string $withdrawalId, string $status, ?string $adminNote = null): Withdrawal
     {
@@ -155,10 +170,17 @@ class WalletService
                 $wallet = Wallet::where('user_id', $withdrawal->user_id)->first();
                 if ($wallet) {
                     $wallet->increment('balance', $withdrawal->amount);
+
+                    // Catat pengembalian saldo karena penarikan ditolak
+                    $this->recordTransaction(
+                        $withdrawal->user_id,
+                        'topup',
+                        $withdrawal->amount,
+                        "Pengembalian saldo: Penarikan ditolak (" . ($adminNote ?? 'Oleh Admin') . ")"
+                    );
                 }
 
-                // Batalkan pencatatan fee kalau sempat tercatat, karena
-                // penarikannya batal dan fee tidak jadi dipungut.
+                // Batalkan pencatatan fee kalau sempat tercatat
                 PlatformRevenue::where('withdrawal_id', $withdrawal->id)->delete();
             }
 
@@ -195,7 +217,8 @@ class WalletService
     /**
      * Admin memverifikasi setoran COD dari kurir. Setelah dikonfirmasi,
      * BARU wallet peternak/penjual (95% subtotal) dan kurir (100% ongkir)
-     * dikreditkan sekaligus — karena baru di titik inilah dana benar-benar dipastikan sampai ke platform.
+     * dikreditkan sekaligus.
+     * 
      * @throws \Exception jika shipment/order tidak valid untuk diproses
      */
     public function confirmCodSettlement(Shipment $shipment): void
@@ -220,6 +243,14 @@ class WalletService
             );
             $sellerWallet->increment('balance', $saldoPenjual);
 
+            // Catat mutasi penghasilan untuk peternak
+            $this->recordTransaction(
+                $order->peternak_id,
+                'income',
+                $saldoPenjual,
+                "Penjualan produk COD #" . ($order->order_number ?? $order->id)
+            );
+
             PlatformRevenue::create([
                 'id' => Str::uuid()->toString(),
                 'source' => 'transaction_fee',
@@ -236,14 +267,22 @@ class WalletService
                     ['id' => Str::uuid()->toString(), 'balance' => 0]
                 );
                 $courierWallet->increment('balance', (float) $order->ongkir);
+
+                // Catat mutasi ongkir untuk kurir
+                $this->recordTransaction(
+                    $courierUserId,
+                    'income',
+                    (float) $order->ongkir,
+                    "Ongkos kirim pesanan COD #" . ($order->order_number ?? $order->id)
+                );
             }
 
             $shipment->update(['cod_deposit_status' => 'selesai']);
         });
     }
+
     /**
      * Admin mencatat bahwa peringatan sudah dikirim ke kurir yang telat menyetor COD. 
-     * Tidak melakukan apa pun ke wallet, cuma menandai waktu peringatan supaya bisa dihitung kapan boleh disuspend.
      */
     public function warnLateCodDeposit(Shipment $shipment): void
     {
@@ -255,7 +294,7 @@ class WalletService
     }
 
     /**
-     * Cek apakah kurir sudah boleh disuspend (sudah diperingatkan lebih dari 24 jam yang lalu dan masih belum menyetor).
+     * Cek apakah kurir sudah boleh disuspend.
      */
     public function isEligibleForCodSuspend(Shipment $shipment): bool
     {

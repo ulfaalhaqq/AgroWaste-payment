@@ -133,6 +133,7 @@ Route::prefix('v1')->group(function () {
         // Wallet Routes (untuk Peternak & Kurir)
         Route::prefix('wallet')->group(function () {
             Route::get('/', [\App\Http\Controllers\Api\WalletController::class, 'show']);
+            Route::get('/transactions', [\App\Http\Controllers\Api\WalletController::class, 'transactions']);
             Route::post('/withdraw', [\App\Http\Controllers\Api\WalletController::class, 'requestWithdrawal']);
             Route::post('/topup', [\App\Http\Controllers\Api\WalletController::class, 'requestTopUp']);
         });

@@ -44,6 +44,34 @@ class WalletController extends Controller
     }
 
     /**
+     * Lihat riwayat transaksi/mutasi wallet milik user yang sedang login.
+     */
+    public function transactions(Request $request): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+
+            if (class_exists(\App\Models\WalletTransaction::class)) {
+                $transactions = \App\Models\WalletTransaction::where('user_id', $user->id)
+                    ->latest()
+                    ->get();
+            } else {
+                $transactions = [];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $transactions,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengambil riwayat transaksi: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Ajukan penarikan saldo.
      */
     public function requestWithdrawal(Request $request): JsonResponse
@@ -121,6 +149,7 @@ class WalletController extends Controller
             ], 422);
         }
     }
+
     /**
      * [Kurir] Upload bukti setoran cash COD ke rekening admin.
      */
@@ -153,6 +182,7 @@ class WalletController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
     }
+
     public function warnLateCodDeposit(string $shipmentId): JsonResponse
     {
         $shipment = Shipment::findOrFail($shipmentId);
@@ -163,6 +193,7 @@ class WalletController extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
         }
     }
+
     /**
      * Generate Snap Token untuk top up saldo wallet.
      */

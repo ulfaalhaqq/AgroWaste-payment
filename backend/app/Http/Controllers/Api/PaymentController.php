@@ -8,13 +8,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\UploadPaymentProofRequest;
 use App\Models\Order;
 use App\Services\PaymentService;
+use App\Services\WalletService; // 1. Import WalletService
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class PaymentController extends Controller
 {
-    public function __construct(protected PaymentService $paymentService)
-    {
+    public function __construct(
+        protected PaymentService $paymentService,
+        protected WalletService $walletService // 2. Inject WalletService
+    ) {
     }
 
     /**
@@ -75,11 +78,20 @@ class PaymentController extends Controller
                 $topup = \App\Models\WalletTopup::where('reference', $request->order_id)->first();
                 if ($topup && $topup->status === 'pending') {
                     $topup->update(['status' => 'sukses']);
+                    
                     $wallet = \App\Models\Wallet::firstOrCreate(
                         ['user_id' => $topup->user_id],
                         ['id' => \Illuminate\Support\Str::uuid()->toString(), 'balance' => 0]
                     );
                     $wallet->increment('balance', (float) $topup->amount);
+
+                    // 3. PANGGIL CATATAN MUTASI DI SINI!
+                    $this->walletService->recordTransaction(
+                        (string) $topup->user_id,
+                        'topup',
+                        (float) $topup->amount,
+                        "Top Up Saldo via QRIS/Midtrans ({$request->order_id})"
+                    );
                 }
             }
             return response()->json(['message' => 'Webhook top up berhasil diproses'], 200);
@@ -91,12 +103,6 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        // Jika pembayaran sukses, ubah status order & payment.
-        // PENTING: wallet peternak TIDAK dikreditkan di sini lagi.
-        // Kredit wallet baru terjadi saat peternak klik "Terima" pesanan
-        // (lihat OrderService::processOrderBySeller), supaya peternak
-        // punya kesempatan menolak pesanan sebelum dana benar-benar
-        // dianggap miliknya.
         if ($request->transaction_status == 'settlement' || $request->transaction_status == 'capture') {
 
             // Hindari proses dobel kalau webhook Midtrans terkirim lebih dari sekali
@@ -113,5 +119,4 @@ class PaymentController extends Controller
 
         return response()->json(['message' => 'Webhook berhasil diproses'], 200);
     }
-
 }
