@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
+import { Menu, Wallet, X } from "lucide-react";
 import { apiFetch, getProductImageUrl } from "@/lib/api";
 import { getUser, logout, type AuthUser } from "@/lib/auth";
 
@@ -226,6 +226,17 @@ export function Header() {
                     </svg>
                     Profil Saya
                   </Link>
+                  <Link
+                    href="/wallet"
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-bold hover:bg-neutral-50 rounded-lg transition-colors ${
+                      pathname.startsWith("/wallet")
+                        ? "text-land-clay"
+                        : "text-land-dark/70"
+                    }`}
+                  >
+                    <Wallet className="w-4 h-4" />
+                    Saldo Wallet
+                  </Link>
                   <button
                     type="button"
                     onClick={handleLogout}
@@ -304,6 +315,20 @@ export function Header() {
               {label}
             </Link>
           ))}
+
+          {mounted && isLoggedIn && (
+            <Link
+              href="/wallet"
+              className={`transition-all duration-200 py-2 border-b border-neutral-50 flex items-center gap-2 ${
+                pathname.startsWith("/wallet")
+                  ? "text-land-clay pl-2 border-l-2 border-land-clay font-bold"
+                  : "hover:text-land-clay hover:pl-2"
+              }`}
+            >
+              <Wallet className="w-4 h-4" />
+              Saldo Wallet
+            </Link>
+          )}
 
           {mounted && isLoggedIn && (
             <button
