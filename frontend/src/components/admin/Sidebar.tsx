@@ -15,6 +15,7 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [withdrawalCount, setWithdrawalCount] = useState<number | null>(null);
 
   useEffect(() => {
     apiFetch("/admin/products")
@@ -25,6 +26,18 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
           (p: { status: string }) => p.status === "menunggu_review",
         );
         setPendingCount(pending.length);
+      })
+      .catch(() => {});
+
+    // Jumlah permintaan penarikan saldo yang menunggu diproses admin
+    apiFetch("/admin/withdrawals")
+      .then((res) => (res.ok ? res.json() : { data: [] }))
+      .then((json) => {
+        const all = Array.isArray(json.data) ? json.data : [];
+        const waiting = all.filter(
+          (w: { status: string }) => w.status === "pending",
+        );
+        setWithdrawalCount(waiting.length);
       })
       .catch(() => {});
   }, [pathname]); // Reload when pathname changes to sync stats
@@ -56,6 +69,15 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
       name: "Logistik",
       path: "/admin/logistics",
       icon: "M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M13 16h4l4 4V10h-8z",
+    },
+    {
+      name: "Penarikan Saldo",
+      path: "/admin/withdrawals",
+      badge:
+        withdrawalCount !== null && withdrawalCount > 0
+          ? withdrawalCount
+          : undefined,
+      icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
     },
     {
       name: "Analitik Dampak",
