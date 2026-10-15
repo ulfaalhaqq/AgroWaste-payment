@@ -43,6 +43,12 @@ class WalletService
 
     /**
      * Catat mutasi transaksi wallet.
+     *
+     * Jenis (type) yang dipakai:
+     *  - 'topup'      : kredit dari top up atau pengembalian dana
+     *  - 'income'     : kredit penghasilan (penjualan, ongkir)
+     *  - 'payment'    : debit pembayaran (checkout wallet, fee platform)
+     *  - 'withdrawal' : debit penarikan saldo
      */
     public function recordTransaction(string $userId, string $type, float $amount, ?string $description = null, string $status = 'success'): WalletTransaction
     {
@@ -131,7 +137,7 @@ class WalletService
 
             // Catat mutasi penarikan
             $this->recordTransaction(
-                $user->id,
+                (string) $user->id,
                 'withdrawal',
                 $amount,
                 "Penarikan saldo ke rekening {$bankName} ({$bankAccountNumber})"
@@ -172,10 +178,11 @@ class WalletService
                     $wallet->increment('balance', $withdrawal->amount);
 
                     // Catat pengembalian saldo karena penarikan ditolak
+                    // (nominal di-cast ke float karena strict_types aktif)
                     $this->recordTransaction(
-                        $withdrawal->user_id,
+                        (string) $withdrawal->user_id,
                         'topup',
-                        $withdrawal->amount,
+                        (float) $withdrawal->amount,
                         "Pengembalian saldo: Penarikan ditolak (" . ($adminNote ?? 'Oleh Admin') . ")"
                     );
                 }
@@ -245,7 +252,7 @@ class WalletService
 
             // Catat mutasi penghasilan untuk peternak
             $this->recordTransaction(
-                $order->peternak_id,
+                (string) $order->peternak_id,
                 'income',
                 $saldoPenjual,
                 "Penjualan produk COD #" . ($order->order_number ?? $order->id)
@@ -270,7 +277,7 @@ class WalletService
 
                 // Catat mutasi ongkir untuk kurir
                 $this->recordTransaction(
-                    $courierUserId,
+                    (string) $courierUserId,
                     'income',
                     (float) $order->ongkir,
                     "Ongkos kirim pesanan COD #" . ($order->order_number ?? $order->id)

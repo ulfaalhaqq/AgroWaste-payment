@@ -16,6 +16,8 @@ import {
 import { apiFetch } from "@/lib/api";
 
 type WithdrawalStatus = "pending" | "diproses" | "selesai" | "ditolak";
+type Tab = "Semua" | "Menunggu" | "Selesai" | "Ditolak";
+type Action = "approve" | "reject";
 
 interface AdminWithdrawal {
   id: string;
@@ -36,8 +38,7 @@ interface AdminWithdrawal {
   } | null;
 }
 
-type Tab = "Semua" | "Menunggu" | "Selesai" | "Ditolak";
-type Action = "approve" | "reject";
+const ITEMS_PER_PAGE = 5;
 
 function formatRupiah(n: string | number) {
   return new Intl.NumberFormat("id-ID", {
@@ -100,8 +101,6 @@ function roleLabel(role?: string) {
 const isWaiting = (w: AdminWithdrawal) =>
   w.status === "pending" || w.status === "diproses";
 
-const ITEMS_PER_PAGE = 5; // Batasan data per halaman
-
 export default function AdminWithdrawalsPage() {
   const [items, setItems] = useState<AdminWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,20 +114,15 @@ export default function AdminWithdrawalsPage() {
     text: string;
   } | null>(null);
 
-  // State untuk menyimpan ID item yang sedang di-expand (diklik)
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  // State Paginasi
   const [currentPage, setCurrentPage] = useState(1);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const [target, setTarget] = useState<{
-    item: AdminWithdrawal;
-    action: Action;
-  } | null>(null);
+  const [target, setTarget] = useState<AdminWithdrawal | null>(null);
+  const [action, setAction] = useState<Action>("approve");
   const [note, setNote] = useState("");
   const [processing, setProcessing] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     setRefreshing(true);
@@ -153,33 +147,28 @@ export default function AdminWithdrawalsPage() {
     fetchAll();
   }, [fetchAll]);
 
-  // Reset halaman ke 1 ketika tab atau kata kunci pencarian berubah
   useEffect(() => {
     setCurrentPage(1);
   }, [tab, search]);
 
-  // ---------- Statistik ----------
   const waitingList = items.filter(isWaiting);
   const doneList = items.filter((w) => w.status === "selesai");
   const rejectedList = items.filter((w) => w.status === "ditolak");
+  const feeList = items.filter((w) => w.status !== "ditolak");
+
   const sum = (list: AdminWithdrawal[], key: "amount" | "fee" | "net_amount") =>
     list.reduce((acc, w) => acc + Number(w[key] || 0), 0);
 
   const waitingNet = sum(waitingList, "net_amount");
-  const feeList = items.filter((w) => w.status !== "ditolak");
+  const doneNet = sum(doneList, "net_amount");
+  const rejectedAmount = sum(rejectedList, "amount");
+  const totalFee = sum(feeList, "fee");
+
   const oldestWaiting = [...waitingList].sort(
     (a, b) =>
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   )[0];
 
-  const tabs: { label: Tab; count: number }[] = [
-    { label: "Semua", count: items.length },
-    { label: "Menunggu", count: waitingList.length },
-    { label: "Selesai", count: doneList.length },
-    { label: "Ditolak", count: rejectedList.length },
-  ];
-
-  // ---------- Filter & Urutan Terbaru (DESC) ----------
   const query = search.trim().toLowerCase();
   const visible = items
     .filter((w) => {
@@ -197,41 +186,43 @@ export default function AdminWithdrawalsPage() {
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(query));
     })
-    .sort((a, b) => {
-      // Urutkan murni berdasarkan dibuat terbaru (DESC)
-      const ta = new Date(a.created_at).getTime();
-      const tb = new Date(b.created_at).getTime();
-      return tb - ta;
-    });
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
 
-  // ---------- Logic Paginasi ----------
   const totalPages = Math.ceil(visible.length / ITEMS_PER_PAGE);
   const paginatedVisible = visible.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
   );
 
-  const toggleExpand = (id: string) => {
-    setExpandedId((prev) => (prev === id ? null : id));
+  const tabs: { label: Tab; count: number }[] = [
+    { label: "Semua", count: items.length },
+    { label: "Menunggu", count: waitingList.length },
+    { label: "Selesai", count: doneList.length },
+    { label: "Ditolak", count: rejectedList.length },
+  ];
+
+  const handleCopy = async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
+    } catch {
+      /* ignore copy error */
+    }
   };
 
-  // ---------- Aksi ----------
-  const openModal = (item: AdminWithdrawal, action: Action) => {
-    setTarget({ item, action });
-    setNote("");
-    setModalError(null);
-  };
-
-  const closeModal = () => {
-    if (processing) return;
-    setTarget(null);
+  const openModal = (w: AdminWithdrawal, act: Action) => {
+    setTarget(w);
+    setAction(act);
     setNote("");
     setModalError(null);
   };
 
   const submitProcess = async () => {
     if (!target) return;
-    const { item, action } = target;
     const trimmed = note.trim();
 
     if (action === "reject" && trimmed.length < 3) {
@@ -246,7 +237,7 @@ export default function AdminWithdrawalsPage() {
     setProcessing(true);
     setModalError(null);
     try {
-      const res = await apiFetch(`/admin/withdrawals/${item.id}/process`, {
+      const res = await apiFetch(`/admin/withdrawals/${target.id}/process`, {
         method: "PUT",
         body: JSON.stringify({
           status: action === "approve" ? "selesai" : "ditolak",
@@ -260,16 +251,15 @@ export default function AdminWithdrawalsPage() {
         return;
       }
 
-      setTarget(null);
-      setNote("");
       setNotice({
         type: "success",
         text:
           action === "approve"
-            ? `Penarikan ${item.user?.name ?? ""} ditandai selesai.`
-            : `Penarikan ${item.user?.name ?? ""} ditolak dan saldo dikembalikan.`,
+            ? `Penarikan ${target.user?.name ?? ""} ditandai selesai.`
+            : `Penarikan ${target.user?.name ?? ""} ditolak dan saldo dikembalikan.`,
       });
-      await fetchAll();
+      setTarget(null);
+      fetchAll();
     } catch {
       setModalError("Tidak dapat terhubung ke server.");
     } finally {
@@ -277,42 +267,9 @@ export default function AdminWithdrawalsPage() {
     }
   };
 
-  const copyText = async (key: string, text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
-    } catch {
-      /* clipboard error handler */
-    }
-  };
-
-  const steps = [
-    {
-      title: "Cek rekening tujuan",
-      desc: "Salin nomor rekening dan pastikan nama pemilik sesuai.",
-    },
-    {
-      title: "Transfer manual",
-      desc: "Transfer sebesar nominal “Harus ditransfer” (sudah dipotong biaya admin) lewat bank Anda.",
-    },
-    {
-      title: "Tandai selesai",
-      desc: "Klik Setujui setelah transfer berhasil. Penarikan ditutup dan tidak bisa diubah lagi.",
-    },
-    {
-      title: "Atau tolak",
-      desc: "Isi alasan penolakan. Saldo dikembalikan penuh ke pengguna dan biaya admin dibatalkan.",
-    },
-  ];
-
-  const inputCls =
-    "w-full px-3 py-2 bg-white border border-black/10 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-admin-primary";
-
   return (
     <>
       <div className="space-y-6 pb-10">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 mb-1">
@@ -330,7 +287,9 @@ export default function AdminWithdrawalsPage() {
             className="self-start sm:self-auto px-4 py-2 bg-white hover:bg-gray-50 border border-black/10 text-gray-800 font-bold text-xs rounded-xl shadow-sm flex items-center gap-2 transition-colors disabled:opacity-60"
           >
             <RefreshCw
-              className={`w-3.5 h-3.5 text-admin-primary ${refreshing ? "animate-spin" : ""}`}
+              className={`w-3.5 h-3.5 text-admin-primary ${
+                refreshing ? "animate-spin" : ""
+              }`}
             />
             Perbarui Data
           </button>
@@ -357,7 +316,6 @@ export default function AdminWithdrawalsPage() {
           </div>
         )}
 
-        {/* Statistik */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white border border-black/10 rounded-2xl p-5 flex flex-col justify-between gap-3">
             <div className="flex items-center justify-between">
@@ -392,7 +350,7 @@ export default function AdminWithdrawalsPage() {
                 {loading ? "..." : doneList.length}
               </div>
               <div className="text-xs text-gray-500 mt-1 font-tabular">
-                {formatRupiah(sum(doneList, "net_amount"))} sudah ditransfer
+                {formatRupiah(doneNet)} sudah ditransfer
               </div>
             </div>
           </div>
@@ -411,7 +369,7 @@ export default function AdminWithdrawalsPage() {
                 {loading ? "..." : rejectedList.length}
               </div>
               <div className="text-xs text-gray-500 mt-1 font-tabular">
-                {formatRupiah(sum(rejectedList, "amount"))} dikembalikan
+                {formatRupiah(rejectedAmount)} dikembalikan
               </div>
             </div>
           </div>
@@ -427,7 +385,7 @@ export default function AdminWithdrawalsPage() {
             </div>
             <div>
               <div className="text-2xl font-bold text-gray-900 font-tabular">
-                {loading ? "..." : formatRupiah(sum(feeList, "fee"))}
+                {loading ? "..." : formatRupiah(totalFee)}
               </div>
               <div className="text-xs text-gray-500 mt-1">
                 Dari penarikan tidak ditolak
@@ -436,12 +394,21 @@ export default function AdminWithdrawalsPage() {
           </div>
         </div>
 
-        {/* Baris utama: daftar (kiri) | panduan & antrean (kanan) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Daftar */}
           <div className="lg:col-span-8 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex border-b border-black/10 overflow-x-auto sm:flex-1">
+              <div className="relative w-full sm:w-60">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Cari nama, bank, rekening..."
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-black/10 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-admin-primary"
+                />
+              </div>
+
+              <div className="flex border-b border-black/10 overflow-x-auto sm:flex-1 justify-start sm:justify-end">
                 {tabs.map((t) => (
                   <button
                     key={t.label}
@@ -466,16 +433,6 @@ export default function AdminWithdrawalsPage() {
                   </button>
                 ))}
               </div>
-              <div className="relative w-full sm:w-60">
-                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Cari nama, bank, rekening..."
-                  className="w-full pl-9 pr-3 py-2 bg-white border border-black/10 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-admin-primary"
-                />
-              </div>
             </div>
 
             {loading && (
@@ -490,14 +447,14 @@ export default function AdminWithdrawalsPage() {
                   <Wallet className="w-5 h-5" />
                 </div>
                 <p className="text-sm font-bold text-gray-900">
-                  {query
+                  {search.trim()
                     ? "Tidak ada hasil untuk pencarian ini"
                     : tab === "Menunggu"
                       ? "Tidak ada penarikan yang menunggu"
                       : "Belum ada data penarikan"}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {query
+                  {search.trim()
                     ? "Coba kata kunci lain atau ganti tab."
                     : "Permintaan baru dari pengguna akan muncul di sini."}
                 </p>
@@ -505,22 +462,27 @@ export default function AdminWithdrawalsPage() {
             )}
 
             {!loading &&
-              paginatedVisible.map((w) => {
+              paginatedVisible.map((w, index) => {
+                const isExpanded = expandedId === w.id;
                 const { label, cls } = statusInfo(w.status);
                 const name = w.user?.name ?? "Pengguna";
-                const isExpanded = expandedId === w.id;
+                const itemNumber =
+                  (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
 
                 return (
                   <div
                     key={w.id}
                     className="bg-white border border-black/10 rounded-2xl overflow-hidden transition-all shadow-sm hover:border-black/20"
                   >
-                    {/* Ringkasan Header List (Dapat Diklik) */}
                     <div
-                      onClick={() => toggleExpand(w.id)}
+                      onClick={() => setExpandedId(isExpanded ? null : w.id)}
                       className="px-5 py-4 flex items-center justify-between gap-3 cursor-pointer hover:bg-gray-50/50 transition-colors select-none"
                     >
                       <div className="flex items-center gap-3 min-w-0">
+                        {/* Nomor List Tajam/Kontras */}
+                        <span className="text-xs font-extrabold text-gray-900 w-5 text-center shrink-0">
+                          {itemNumber}.
+                        </span>
                         <div className="w-10 h-10 shrink-0 rounded-full bg-admin-primary-light text-admin-primary font-bold flex items-center justify-center">
                           {name.charAt(0).toUpperCase()}
                         </div>
@@ -551,10 +513,8 @@ export default function AdminWithdrawalsPage() {
                       </div>
                     </div>
 
-                    {/* Detail Ekspansi (Hanya Muncul Saat Card Diklik) */}
                     {isExpanded && (
                       <div className="border-t border-black/5 bg-gray-50/30">
-                        {/* Nominal + rekening */}
                         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="rounded-xl bg-white border border-black/5 px-4 py-3 space-y-1.5 text-xs">
                             <div className="flex justify-between">
@@ -596,7 +556,10 @@ export default function AdminWithdrawalsPage() {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  copyText(`${w.id}-no`, w.bank_account_number);
+                                  handleCopy(
+                                    `${w.id}-no`,
+                                    w.bank_account_number,
+                                  );
                                 }}
                                 className="p-1 rounded-md text-gray-500 hover:bg-gray-200 transition-colors"
                                 title="Salin nomor rekening"
@@ -614,7 +577,6 @@ export default function AdminWithdrawalsPage() {
                           </div>
                         </div>
 
-                        {/* Footer Detail: Waktu + Aksi */}
                         <div className="px-5 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           <div className="text-[11px] text-gray-500 space-y-0.5">
                             <div>Diajukan {formatDate(w.created_at)}</div>
@@ -664,11 +626,12 @@ export default function AdminWithdrawalsPage() {
                 );
               })}
 
-            {/* Komponen Paginasi Navigasi */}
             {!loading && totalPages > 1 && (
               <div className="flex items-center justify-between bg-white border border-black/10 rounded-2xl px-5 py-3">
                 <div className="text-xs text-gray-500">
-                  Halaman <span className="font-bold text-gray-900">{currentPage}</span> dari{" "}
+                  Halaman{" "}
+                  <span className="font-bold text-gray-900">{currentPage}</span>{" "}
+                  dari{" "}
                   <span className="font-bold text-gray-900">{totalPages}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -682,7 +645,9 @@ export default function AdminWithdrawalsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(p + 1, totalPages))
+                    }
                     disabled={currentPage === totalPages}
                     className="px-3 py-1.5 border border-black/10 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
@@ -693,7 +658,6 @@ export default function AdminWithdrawalsPage() {
             )}
           </div>
 
-          {/* Kolom kanan */}
           <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-6">
             <div className="bg-admin-primary rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
               <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl pointer-events-none" />
@@ -720,7 +684,24 @@ export default function AdminWithdrawalsPage() {
                 </h3>
               </div>
               <div className="p-5 space-y-4">
-                {steps.map((s, i) => (
+                {[
+                  {
+                    title: "Cek rekening tujuan",
+                    desc: "Salin nomor rekening dan pastikan nama pemilik sesuai.",
+                  },
+                  {
+                    title: "Transfer manual",
+                    desc: "Transfer sebesar nominal “Harus ditransfer” (sudah dipotong biaya admin) lewat bank Anda.",
+                  },
+                  {
+                    title: "Tandai selesai",
+                    desc: "Klik Setujui setelah transfer berhasil. Penarikan ditutup dan tidak bisa diubah lagi.",
+                  },
+                  {
+                    title: "Atau tolak",
+                    desc: "Isi alasan penolakan. Saldo dikembalikan penuh ke pengguna dan biaya admin dibatalkan.",
+                  },
+                ].map((s, i) => (
                   <div key={s.title} className="flex gap-3">
                     <div className="w-6 h-6 shrink-0 rounded-full bg-admin-primary-light text-admin-primary text-xs font-bold flex items-center justify-center">
                       {i + 1}
@@ -741,19 +722,16 @@ export default function AdminWithdrawalsPage() {
         </div>
       </div>
 
-      {/* Modal konfirmasi */}
       {target && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-md rounded-2xl border border-black/10 overflow-hidden flex flex-col max-h-[92vh] shadow-xl">
             <div className="p-4 border-b border-black/10 flex justify-between items-center">
               <h3 className="font-bold text-gray-900">
-                {target.action === "approve"
-                  ? "Setujui Penarikan"
-                  : "Tolak Penarikan"}
+                {action === "approve" ? "Setujui Penarikan" : "Tolak Penarikan"}
               </h3>
               <button
                 type="button"
-                onClick={closeModal}
+                onClick={() => setTarget(null)}
                 disabled={processing}
                 className="text-gray-500 hover:text-gray-900"
               >
@@ -766,47 +744,38 @@ export default function AdminWithdrawalsPage() {
                 <div className="flex justify-between gap-3">
                   <span className="text-gray-500">Pemohon</span>
                   <span className="font-bold text-gray-900 text-right">
-                    {target.item.user?.name ?? "Pengguna"}
+                    {target.user?.name ?? "Pengguna"}
                   </span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-gray-500">
-                    {target.action === "approve"
+                    {action === "approve"
                       ? "Transfer sebesar"
                       : "Dikembalikan ke saldo"}
                   </span>
                   <span className="font-bold text-gray-900 font-tabular">
                     {formatRupiah(
-                      target.action === "approve"
-                        ? target.item.net_amount
-                        : target.item.amount,
+                      action === "approve" ? target.net_amount : target.amount,
                     )}
                   </span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-gray-500">Rekening</span>
                   <span className="font-bold text-gray-900 text-right">
-                    {target.item.bank_name} {target.item.bank_account_number}
+                    {target.bank_name} {target.bank_account_number}
                     <br />
                     <span className="font-normal">
-                      a.n. {target.item.bank_account_name}
+                      a.n. {target.bank_account_name}
                     </span>
                   </span>
                 </div>
               </div>
 
-              {target.action === "approve" ? (
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Pastikan Anda sudah mentransfer dana ke rekening di atas.
-                  Setelah disetujui, status menjadi Selesai dan tidak bisa
-                  diubah lagi.
-                </p>
-              ) : (
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  Saldo akan dikembalikan penuh ke pengguna dan biaya admin
-                  dibatalkan. Alasan penolakan akan terlihat oleh pengguna.
-                </p>
-              )}
+              <p className="text-xs text-gray-600 leading-relaxed">
+                {action === "approve"
+                  ? "Pastikan Anda sudah mentransfer dana ke rekening di atas. Setelah disetujui, status menjadi Selesai dan tidak bisa diubah lagi."
+                  : "Saldo akan dikembalikan penuh ke pengguna dan biaya admin dibatalkan. Alasan penolakan akan terlihat oleh pengguna."}
+              </p>
 
               {modalError && (
                 <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-semibold">
@@ -816,7 +785,7 @@ export default function AdminWithdrawalsPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  {target.action === "approve"
+                  {action === "approve"
                     ? "Catatan (opsional)"
                     : "Alasan penolakan *"}
                 </label>
@@ -826,11 +795,11 @@ export default function AdminWithdrawalsPage() {
                   rows={3}
                   maxLength={255}
                   placeholder={
-                    target.action === "approve"
+                    action === "approve"
                       ? "Contoh: Ditransfer via BCA pukul 14.30"
                       : "Contoh: Nama pemilik rekening tidak sesuai"
                   }
-                  className={`${inputCls} resize-none`}
+                  className="w-full px-3 py-2 bg-white border border-black/10 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-admin-primary resize-none"
                 />
                 <div className="text-[10px] text-gray-400 text-right mt-0.5">
                   {note.length}/255
@@ -841,7 +810,7 @@ export default function AdminWithdrawalsPage() {
             <div className="p-4 border-t border-black/10 flex justify-end gap-3 bg-gray-50">
               <button
                 type="button"
-                onClick={closeModal}
+                onClick={() => setTarget(null)}
                 disabled={processing}
                 className="px-4 py-2 text-xs font-bold text-gray-600 hover:text-gray-900 disabled:opacity-50"
               >
@@ -852,14 +821,12 @@ export default function AdminWithdrawalsPage() {
                 onClick={submitProcess}
                 disabled={processing}
                 className={`px-4 py-2 text-white rounded-lg text-xs font-bold transition-opacity hover:opacity-90 disabled:opacity-60 ${
-                  target.action === "approve"
-                    ? "bg-admin-primary"
-                    : "bg-red-600"
+                  action === "approve" ? "bg-admin-primary" : "bg-red-600"
                 }`}
               >
                 {processing
                   ? "Memproses..."
-                  : target.action === "approve"
+                  : action === "approve"
                     ? "Ya, Sudah Ditransfer"
                     : "Tolak Penarikan"}
               </button>

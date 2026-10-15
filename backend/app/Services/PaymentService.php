@@ -18,6 +18,14 @@ use App\Models\WalletTopup;
 class PaymentService
 {
     /**
+     * WalletService dipakai untuk mencatat mutasi saldo (wallet_transactions)
+     * setiap kali saldo wallet berubah di service ini.
+     */
+    public function __construct(protected WalletService $walletService)
+    {
+    }
+
+    /**
      * Persentase fee platform yang dipotong dari harga limbah (subtotal_produk),
      * bukan dari ongkir.
      */
@@ -153,7 +161,7 @@ class PaymentService
     }
 
     /**
-     * Dipanggil dari webhook Midtrans ketika pembayaran settlement.
+     * Dipanggil ketika peternak menerima pesanan yang sudah lunas.
      * Menghitung fee platform 5% dari harga limbah (subtotal_produk),
      * lalu menambahkan sisanya ke wallet peternak.
      *
@@ -173,6 +181,14 @@ class PaymentService
                 ['id' => Str::uuid()->toString(), 'balance' => 0]
             );
             $wallet->increment('balance', $saldoPenjual);
+
+            // Catat mutasi penghasilan penjualan untuk peternak
+            $this->walletService->recordTransaction(
+                (string) $order->peternak_id,
+                'income',
+                (float) $saldoPenjual,
+                "Penjualan produk #" . ($order->order_number ?? $order->id) . " (setelah fee platform)"
+            );
 
             PlatformRevenue::create([
                 'id' => Str::uuid()->toString(),
@@ -202,6 +218,14 @@ class PaymentService
             );
 
             $wallet->increment('balance', (float) $order->total_price);
+
+            // Catat mutasi kredit pengembalian dana untuk pembeli
+            $this->walletService->recordTransaction(
+                (string) $order->user_id,
+                'topup',
+                (float) $order->total_price,
+                "Pengembalian saldo: pesanan #" . ($order->order_number ?? $order->id) . " ditolak peternak"
+            );
         });
     }
 
@@ -265,6 +289,14 @@ class PaymentService
                 ['id' => Str::uuid()->toString(), 'balance' => 0]
             );
             $wallet->increment('balance', (float) $order->ongkir);
+
+            // Catat mutasi ongkos kirim untuk kurir
+            $this->walletService->recordTransaction(
+                (string) $courierUserId,
+                'income',
+                (float) $order->ongkir,
+                "Ongkos kirim pesanan #" . ($order->order_number ?? $order->id)
+            );
         });
     }
 
@@ -294,6 +326,14 @@ class PaymentService
                 ['id' => Str::uuid()->toString(), 'balance' => 0]
             );
             $wallet->decrement('balance', $feeAdmin);
+
+            // Catat mutasi debit fee platform untuk peternak
+            $this->walletService->recordTransaction(
+                (string) $order->peternak_id,
+                'payment',
+                (float) $feeAdmin,
+                "Fee platform pesanan COD pickup #" . ($order->order_number ?? $order->id)
+            );
 
             PlatformRevenue::create([
                 'id' => Str::uuid()->toString(),

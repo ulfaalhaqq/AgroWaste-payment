@@ -11,8 +11,10 @@ use Illuminate\Support\Str;
 
 class OrderService
 {
-    public function __construct(protected PaymentService $paymentService)
-    {
+    public function __construct(
+        protected PaymentService $paymentService,
+        protected WalletService $walletService,
+    ) {
     }
 
     public function createOrder(array $data, User $user): Order
@@ -155,6 +157,14 @@ class OrderService
                 }
 
                 $buyerWallet->decrement('balance', $order->total_price);
+
+                // Catat mutasi debit pembayaran (ikut di-rollback kalau transaksi gagal)
+                $this->walletService->recordTransaction(
+                    (string) $userId,
+                    'payment',
+                    (float) $order->total_price,
+                    "Pembayaran pesanan #{$order->order_number} via Saldo Wallet"
+                );
 
                 \App\Models\Payment::create([
                     'id' => \Illuminate\Support\Str::uuid()->toString(),
