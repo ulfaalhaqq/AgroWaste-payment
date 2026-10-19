@@ -95,6 +95,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/couriers', [\App\Http\Controllers\Api\AdminController::class, 'createCourier']);
             Route::post('/shipments/assign', [\App\Http\Controllers\Api\AdminController::class, 'assignCourier']);
             Route::get('/analytics', [\App\Http\Controllers\Api\AdminController::class, 'getAnalytics']);
+            Route::get('/platform-revenue', [\App\Http\Controllers\Api\AdminController::class, 'platformRevenue']); // Pendapatan platform (fee transaksi & biaya penarikan)
             Route::get('/withdrawals', [\App\Http\Controllers\Api\WalletController::class, 'adminIndex']);
             Route::put('/withdrawals/{id}/process', [\App\Http\Controllers\Api\WalletController::class, 'adminProcess']);
             Route::put('/orders/{orderId}/confirm-manual-payment', [\App\Http\Controllers\Api\AdminPaymentController::class, 'confirmManualPayment']);

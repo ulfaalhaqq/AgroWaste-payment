@@ -11,6 +11,7 @@ use App\Models\Order;
 use App\Models\LogistikProfile;
 use App\Models\Shipment;
 use App\Models\ImpactLog;
+use App\Models\PlatformRevenue;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -219,6 +220,85 @@ class AdminController extends Controller
                 'category_distribution'  => $categoryDist,
                 'regional_distribution'  => $regionalDist,
             ]
+        ]);
+    }
+
+    /**
+     * [Admin] Ringkasan pendapatan platform dari tabel platform_revenues:
+     * fee transaksi (source: transaction_fee) dan biaya penarikan
+     * (source: withdrawal_fee), total per bulan (6 bulan terakhir),
+     * serta daftar pendapatan terbaru.
+     */
+    public function platformRevenue(): JsonResponse
+    {
+        // Total & jumlah transaksi per sumber pendapatan
+        $perSource = PlatformRevenue::query()
+            ->select('source', DB::raw('SUM(amount) as total'), DB::raw('COUNT(*) as cnt'))
+            ->groupBy('source')
+            ->get()
+            ->keyBy('source');
+
+        $transactionFee = (float) ($perSource->get('transaction_fee')->total ?? 0);
+        $withdrawalFee  = (float) ($perSource->get('withdrawal_fee')->total ?? 0);
+        $grandTotal     = (float) PlatformRevenue::sum('amount');
+        $other          = max(0, $grandTotal - $transactionFee - $withdrawalFee);
+
+        // Total bulan berjalan
+        $thisMonth = (float) PlatformRevenue::query()
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year)
+            ->sum('amount');
+
+        // 6 bulan terakhir (dihitung di PHP agar tidak bergantung pada fungsi tanggal database tertentu)
+        $start = now()->startOfMonth()->subMonths(5);
+        $rows = PlatformRevenue::query()
+            ->where('created_at', '>=', $start)
+            ->get(['source', 'amount', 'created_at']);
+
+        $monthly = [];
+        for ($i = 0; $i < 6; $i++) {
+            $key = $start->copy()->addMonths($i)->format('Y-m');
+            $monthly[$key] = [
+                'month'           => $key,
+                'transaction_fee' => 0.0,
+                'withdrawal_fee'  => 0.0,
+            ];
+        }
+        foreach ($rows as $row) {
+            $key = $row->created_at->format('Y-m');
+            if (!isset($monthly[$key])) {
+                continue;
+            }
+            if ($row->source === 'transaction_fee') {
+                $monthly[$key]['transaction_fee'] += (float) $row->amount;
+            } elseif ($row->source === 'withdrawal_fee') {
+                $monthly[$key]['withdrawal_fee'] += (float) $row->amount;
+            }
+        }
+
+        // Riwayat pendapatan terbaru (maks. 100)
+        $recent = PlatformRevenue::with([
+                'order:id,order_number,metode_pembayaran,subtotal_produk',
+                'withdrawal:id,amount,fee',
+                'user:id,name,role',
+            ])
+            ->orderBy('created_at', 'desc')
+            ->limit(100)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total'             => $grandTotal,
+                'transaction_fee'   => $transactionFee,
+                'withdrawal_fee'    => $withdrawalFee,
+                'other'             => $other,
+                'transaction_count' => (int) ($perSource->get('transaction_fee')->cnt ?? 0),
+                'withdrawal_count'  => (int) ($perSource->get('withdrawal_fee')->cnt ?? 0),
+                'this_month'        => $thisMonth,
+                'monthly'           => array_values($monthly),
+                'recent'            => $recent,
+            ],
         ]);
     }
 
