@@ -13,6 +13,7 @@ export function saveAuth(token: string, user: AuthUser): void {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   document.cookie = "auth=1; path=/; max-age=86400";
+  document.cookie = `role=${user.role}; path=/; max-age=86400`;
 }
 
 export function getToken(): string | null {
@@ -30,4 +31,5 @@ export function logout(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   document.cookie = "auth=; path=/; max-age=0";
+  document.cookie = "role=; path=/; max-age=0";
 }

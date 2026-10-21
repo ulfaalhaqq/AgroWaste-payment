@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
-  const authCookie = request.cookies.get("auth");
+  const authCookie = request.cookies.get("auth")?.value;
+  const roleCookie = request.cookies.get("role")?.value;
   const pathname = request.nextUrl.pathname;
 
-  const protectedRoutes = ["/pesanan", "/cart", "/checkout"];
+  const protectedRoutes = ["/pesanan", "/cart", "/checkout", "/profile"];
   const isProtected = protectedRoutes.some((route) =>
     pathname.startsWith(route),
   );
@@ -14,6 +15,16 @@ export function middleware(request: NextRequest) {
     const url = new URL("/login", request.url);
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
+  }
+
+  if (authCookie && roleCookie === "admin") {
+    if (pathname === "/" || pathname === "/home" || pathname.startsWith("/profile")) {
+      return NextResponse.redirect(new URL("/admin", request.url));
+    }
+  }
+
+  if (pathname.startsWith("/admin") && roleCookie !== "admin") {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   if (pathname === "/" && authCookie) {
@@ -25,10 +36,15 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
     "/home",
     "/home/:path*",
     "/pesanan/:path*",
     "/cart/:path*",
     "/checkout/:path*",
+    "/profile",
+    "/profile/:path*",
+    "/admin",
+    "/admin/:path*",
   ],
 };
