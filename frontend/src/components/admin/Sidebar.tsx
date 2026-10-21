@@ -71,6 +71,11 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
       icon: "M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M13 16h4l4 4V10h-8z",
     },
     {
+      name: "Transfer Manual",
+      path: "/admin/manual-payments",
+      icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
+    },
+    {
       name: "Setoran COD",
       path: "/admin/cod-deposits",
       icon: "M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z",
@@ -154,7 +159,7 @@ export const Sidebar = ({ mobileOpen = false, onClose }: SidebarProps) => {
               : pathname?.startsWith(item.path);
           return (
             <Link
-              key={item.name}
+              key={item.path}
               href={item.path}
               onClick={onClose}
               aria-current={isActive ? "page" : undefined}
