@@ -14,6 +14,8 @@ import {
   Clock,
   XCircle,
   Star,
+  ShieldCheck,
+  X,
 } from "lucide-react";
 import { apiFetch, getProductImageUrl } from "@/lib/api";
 import { getToken, logout } from "@/lib/auth";
@@ -140,10 +142,17 @@ export default function PesananContent() {
   const [confirmLoadingId, setConfirmLoadingId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
-  const handleConfirmReceipt = async (orderId: string) => {
-    if (!window.confirm("Yakin barang sudah diterima?")) {
-      return;
-    }
+  // State untuk Modal Custom Konfirmasi Pesanan Diterima
+  const [orderToConfirm, setOrderToConfirm] = useState<Order | null>(null);
+
+  const handleOpenConfirmModal = (order: Order) => {
+    setOrderToConfirm(order);
+  };
+
+  const handleConfirmReceipt = async () => {
+    if (!orderToConfirm) return;
+    const orderId = orderToConfirm.id;
+    setOrderToConfirm(null);
     setConfirmLoadingId(orderId);
     try {
       const res = await apiFetch(`/orders/${orderId}/complete`, {
@@ -231,7 +240,7 @@ export default function PesananContent() {
   }, [orders, searchInput, statusFilter, timeFilter]);
 
   return (
-    <div className="flex-1 animate-fade-in pb-20">
+    <div className="flex-1 animate-fade-in pb-20 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         {/* Hero Section & Search Bar */}
         <section className="bg-[#1C231F] rounded-[32px] px-6 py-10 md:py-12 mt-6 flex flex-col items-center justify-center text-center relative overflow-hidden shadow-md">
@@ -617,7 +626,7 @@ export default function PesananContent() {
                             {canConfirmReceipt && (
                               <button
                                 type="button"
-                                onClick={() => handleConfirmReceipt(order.id)}
+                                onClick={() => handleOpenConfirmModal(order)}
                                 disabled={confirmLoadingId === order.id}
                                 className="btn-clay-primary bg-[#009A44] hover:bg-[#008139] px-4 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 text-white shadow-md shadow-[#009A44]/20 active:scale-95 transition-all disabled:opacity-60"
                               >
@@ -693,6 +702,59 @@ export default function PesananContent() {
           </div>
         </div>
       </div>
+
+      {/* Modal Custom Konfirmasi Pesanan Diterima (Muncul di tempat tanpa perlu scroll) */}
+      {orderToConfirm && (
+        <div className="absolute inset-0 bg-black/40 z-50 flex items-start justify-center pt-24 px-4 pointer-events-auto">
+          <div className="bg-white w-full max-w-md rounded-[28px] shadow-2xl overflow-hidden relative p-6 sm:p-7 border border-gray-100">
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setOrderToConfirm(null)}
+              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Icon Header */}
+            <div className="w-12 h-12 rounded-xl bg-[#009A44]/10 text-[#009A44] flex items-center justify-center mb-5">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-xl font-bold text-[#1C231F] mb-2">
+              Konfirmasi Pesanan Diterima
+            </h3>
+            <p className="text-xs sm:text-sm text-gray-600 mb-6 leading-relaxed">
+              Apakah Anda yakin barang sudah diterima dengan baik dan sesuai? Tindakan ini akan menyelesaikan pesanan untuk ID{" "}
+              <span className="font-mono font-bold text-[#1C231F]">
+                {orderToConfirm.order_number ||
+                  (orderToConfirm.id.startsWith("AGW-")
+                    ? orderToConfirm.id
+                    : `AGW-${orderToConfirm.id.slice(0, 8).toUpperCase()}`)}
+              </span>
+              .
+            </p>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setOrderToConfirm(null)}
+                className="flex-1 py-3 px-4 bg-[#F5F2EB] hover:bg-[#E8E0D5] text-[#1C231F] rounded-xl font-bold text-xs sm:text-sm transition-colors cursor-pointer text-center"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReceipt}
+                className="flex-1 py-3 px-4 bg-[#009A44] hover:bg-[#008139] text-white rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer text-center"
+              >
+                Ya, Sudah Diterima
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
