@@ -342,7 +342,7 @@ function OrdersContent() {
                       </button>
                     </div>
                   )}
-                  {order.status === "dikonfirmasi" && (
+                  {order.status === "dikonfirmasi" && order.metode_pengiriman === "logistik" && (
                     <div className="flex gap-3">
                       <button
                         onClick={() => handleUpdateStatus(order, "dikirim")}
@@ -560,21 +560,6 @@ function OrdersContent() {
                     </div>
 
                     {/* Laporan Logistik & Bukti Foto Kurir */}
-                    {/*
-                      PERBAIKAN LOGIC:
-                      1. Blok ini hanya relevan untuk pengiriman via kurir
-                         (metode_pengiriman === "logistik"), jadi dibungkus
-                         kondisi tersebut.
-                      2. Status "Ongkir Lunas/Belum" sebelumnya SELALU
-                         dibaca dari localStorage (proof.isOngkirPaid).
-                         Ini salah untuk pesanan QRIS (midtrans) & transfer
-                         manual, karena ongkir pada metode itu sudah
-                         dibayar di awal saat checkout (menyatu dengan
-                         subtotal produk dalam satu transaksi Midtrans/TF).
-                         Hanya COD yang benar-benar baru lunas belakangan,
-                         saat kurir konfirmasi terima uang cash.
-                      Lihat fungsi getOngkirPaymentInfo() di atas.
-                    */}
                     {order.metode_pengiriman === "logistik" &&
                       (() => {
                         const {
@@ -982,15 +967,21 @@ function OrdersContent() {
                               </>
                             )}
                             {order.status === "dikonfirmasi" && (
-                              <button
-                                onClick={() =>
-                                  handleUpdateStatus(order, "dikirim")
-                                }
-                                disabled={processingId === order.id}
-                                className="px-3 py-1.5 bg-seller-primary text-white rounded-lg text-xs font-bold hover:bg-seller-primary-hover transition-colors disabled:opacity-60"
-                              >
-                                Kirim
-                              </button>
+                              order.metode_pengiriman === "logistik" ? (
+                                <button
+                                  onClick={() =>
+                                    handleUpdateStatus(order, "dikirim")
+                                  }
+                                  disabled={processingId === order.id}
+                                  className="px-3 py-1.5 bg-seller-primary text-white rounded-lg text-xs font-bold hover:bg-seller-primary-hover transition-colors disabled:opacity-60"
+                                >
+                                  Kirim
+                                </button>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-xs font-bold">
+                                  Ambil Sendiri (Pickup)
+                                </span>
+                              )
                             )}
                           </div>
                         </td>

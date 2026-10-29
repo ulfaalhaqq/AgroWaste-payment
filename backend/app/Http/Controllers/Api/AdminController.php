@@ -90,8 +90,9 @@ class AdminController extends Controller
             }
         }
 
-        // Ambil order beserta shipment, user (buyer), peternak, dan detail items
-        $orders = Order::with(['user', 'peternak.peternakProfile', 'items.product'])
+        // Ambil order beserta user (buyer), peternak, detail items, dan
+        // pembayaran + bukti transfer (dipakai halaman konfirmasi Transfer Manual)
+        $orders = Order::with(['user', 'peternak.peternakProfile', 'items.product', 'payment.proof'])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -299,6 +300,29 @@ class AdminController extends Controller
                 'monthly'           => array_values($monthly),
                 'recent'            => $recent,
             ],
+        ]);
+    }
+
+    /**
+     * [Admin] Daftar order dengan metode Transfer Manual beserta bukti
+     * transfernya, supaya admin bisa memeriksa lalu mengonfirmasi lewat
+     * PUT /admin/orders/{orderId}/confirm-manual-payment.
+     * Sengaja dibatasi 200 order terbaru agar sederhana (tanpa pagination).
+     */
+    public function manualPayments(): JsonResponse
+    {
+        $orders = Order::with([
+                'user:id,name,email,phone',
+                'payment.proof',
+            ])
+            ->where('metode_pembayaran', 'manual')
+            ->orderBy('created_at', 'desc')
+            ->limit(200)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data'    => $orders,
         ]);
     }
 
